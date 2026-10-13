@@ -31,6 +31,7 @@ ota:
 # Host-side checks (g++ only, no hardware). Later tasks append their own binaries.
 test:
 	g++ -I. -x c++ tests/test_ihx.c ihx.cpp -o $(BUILD)-t1 && $(BUILD)-t1
+	g++ -I. -x c++ tests/test_script.c script.cpp ihx.cpp -o $(BUILD)-t2 && $(BUILD)-t2
 
 clean:
 	rm -rf $(BUILD)
