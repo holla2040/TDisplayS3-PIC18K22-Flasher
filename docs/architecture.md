@@ -85,6 +85,11 @@ The jig powers VDD from 3V3, so VDD is already up. `icsp_enter()`:
 `icsp_exit()`: PGC/PGD low, VPP off, wait 5 µs (floating again), MCLR_LOW on,
 PGC/PGD released to inputs (P16 = 0: no PGC edge between the last frame and MCLR falling).
 
+LVP entry (key 4D434850h on PGD, MSb first, with MCLR at VIL; DS41398B §2.6) is
+not implemented. The README's [Low-voltage programming (LVP)](../README.md#low-voltage-programming-lvp)
+section has the wiring (Q1 only; no boost, Q2/Q3, R3-R6, GPIO10 unused) and the
+entry/exit sequence for targets whose firmware keeps `LVP` = 1 and `MCLRE` = 1.
+
 `icsp_release()` turns MCLR_LOW off so the target runs. It does nothing while
 VPP_ON is set, so it can't be used mid-session. After `icsp_exit()` the target is
 held in reset until something releases it: `icsp_init()` leaves it held, and the
@@ -369,7 +374,7 @@ checked on every path (HTTP and script `fs_ops`), so nothing can name a folder.
 
 ## Not built (possible additions)
 
-5 V targets, LVP, other PIC families, a jig-assigned serial number, writing a
+5 V targets, LVP (documented in the README, not implemented), other PIC families, a jig-assigned serial number, writing a
 user ID the jig made up, authentication on the web endpoints, per-board logs
 beyond the saved settings files, and wire-level error detection (ICSP gives the
 host no acknowledge, so the driver can't tell a lost command from a good one).

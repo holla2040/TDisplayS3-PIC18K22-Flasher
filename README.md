@@ -136,7 +136,7 @@ The pins are set in `config.h`.
   voltage supervisor or a reset-IC output directly on MCLR on the target board:
   it would see 9 V. Isolate it with a Schottky diode, as the PICkit 2 guide
   advises. The ICSP header pinout is the standard one: 1 MCLR/VPP, 2 VDD, 3 GND,
-  4 PGD, 5 PGC, 6 NC (LVP isn't used).
+  4 PGD, 5 PGC, 6 NC (the K22 has no PGM pin).
 - Leave the target board's own power unplugged while it's on the jig: the jig
   powers VDD from its 3V3 pin.
 - Keep wires short. If connections are flaky, raise `ICSP_HALF_PERIOD` in
@@ -150,6 +150,77 @@ The pins are set in `config.h`.
   fully on. R1/R3 only limit the GPIO's gate-charge current. R5/R6 draw
   4.5 mA from the boost rail while VPP is on. Q1 and Q3 body diodes stay
   reverse-biased (MCLR stays between 0 and 9 V).
+
+## Low-voltage programming (LVP)
+
+**The jig firmware doesn't do LVP yet.** `icsp.cpp` only has the HV entry
+(`icsp_enter()`, MCLR to 9 V). This section is the wiring and the protocol
+for when it does; none of it has been run on hardware.
+
+LVP applies when the target's firmware keeps `LVP` = 1 (CONFIG4L 0x300006
+bit 2) and `MCLRE` = 1 (CONFIG3H bit 7). The Module Monitor R4 boards
+(PIC18F46K22) are built that way, fresh and in the field. LVP is on from the
+factory (DS41398B §5.3: "The LVP bit defaults to a '1' (enabled) from the
+factory"; datasheet DS40001412G §24.9 note 2: enabled in unprogrammed and
+erased devices; Table 24-1 CONFIG4L default `1000 0101`, 0x85), so a new
+board takes LVP with no HV step. The K22 has no PGM pin: entry is a key
+sequence on PGD while MCLR is low. Once in LVP mode MCLR is always enabled,
+whatever `MCLRE` says (DS41398B §2.1.1 note 2).
+
+![T-Display S3 to PIC18(L)F K22 LVP wiring](docs/wiring-lvp.png)
+
+What LVP removes from the [Wiring](#wiring) above: the 5 V to 8.5 V boost,
+Q2, Q3 and R3-R6. GPIO10 (`VPP_ON`) is unused and R4 isn't needed. What
+stays: PGD on GPIO1, PGC on GPIO2, VDD from 3V3, GND, and the MCLR pull-down,
+Q1 on GPIO3 through R1, with R2 100 Ω to MCLR. It is the same jig board with
+the HV parts left unpopulated, so fitting them later brings HV back. With Q1
+off, the target's own 10 kΩ MCLR pull-up to VDD is what raises MCLR to VIH:
+the jig never drives MCLR high. That pull-up is required here too.
+
+- No 9 V ever reaches MCLR, so the [9 V tolerance](#wiring) rule doesn't
+  apply. A reset supervisor on MCLR must still let Q1 pull it low and the
+  pull-up lift it (open-drain, or isolated with a diode).
+- The GPIO3 strapping note above still applies: MCLR is undefined for about
+  300 ms at jig boot.
+- ICSP pin 6 stays NC.
+
+### Entry and exit (DS41398B §2.6, Figures 2-14 and 2-15, §6.0 timing)
+
+Entry, VDD already up from the jig (P13: VDD up at least 100 ns before MCLR
+rises):
+
+1. MCLR at VIH, then to VIL: Q1 off (the pull-up lifts MCLR; no minimum hold
+   time at VIH), then Q1 on. PGC and PGD low and driven.
+2. Wait **P18 ≥ 1 ms** from that MCLR fall to the first PGC rise.
+3. Clock the 32-bit key **4D434850h** (`0100 1101 0100 0011 0100 1000 0101
+   0000`) onto PGD, **MSb first** ("The Most Significant bit of the most
+   significant nibble must be shifted in first"). The command frames after
+   entry stay LSb first, so `write_bits()` can't send the key as it is.
+4. Wait **P20 ≥ 40 ns** after the last key PGC falls, then Q1 off: MCLR back
+   to VIH, and held there for the whole session.
+5. Wait **P15 ≥ 400 µs** after MCLR rises before the first data on PGD.
+   "Signals appearing on PGD before P15 has elapsed may not be interpreted as
+   valid."
+
+Everything after entry (commands, table reads and writes, the P9/P10/P11
+holds) is the same as HV.
+
+Exit: **P16 ≥ 0** after the last PGC falls, then remove VIH from MCLR (Q1 on).
+When MCLR goes back to VIH (Q1 off, what `icsp_release()` does) the target
+runs its application.
+
+- **A part with `LVP` = 0 needs one HV pass first.** `LVP` can be set or
+  cleared only in HV mode (DS41398B §5.3; datasheet §24.9). A board whose
+  firmware cleared it can't be entered over LVP at all; program it once on an
+  HV jig (or MPLAB with a PICkit) with a `firmware.hex` that has `LVP` = 1.
+- **LVP mode can't clear `LVP`**, so programming over LVP can't lock a part
+  out of LVP. Keep `LVP` = 1 in `firmware.hex` anyway: a config write in LVP
+  mode leaves the bit as it is, and what the config `verify` reports for an
+  `LVP` = 0 HEX in that case hasn't been tested.
+- `erase chip` in LVP mode needs VDD inside D111 (DS41398B §3.1.2: 2.7 V
+  minimum for bulk erase); the jig's 3V3 meets it.
+- HV entry keeps working on these parts: "The High-Voltage ICSP mode is always
+  available, regardless of the state of the LVP bit" (DS41398B §2.1.1 note 1).
 
 ## First boot and WiFi
 
@@ -454,9 +525,10 @@ The 16 parts the jig knows, by device ID (the ID register with its 5 revision bi
 
 - The table is in `pic18k22.cpp`. Device IDs are from DS41398 Table 5-2 and sizes
   from the MPLAB X PIC18F-K_DFP 1.14.301 device files.
-- **HV ICSP only.** Low-voltage programming needs both `LVP` = ON and
-  `MCLRE` = EXTMCLR, and field firmware often turns one of them off, so the jig
-  doesn't use it.
+- **HV ICSP only, for now.** Low-voltage programming only works on parts
+  whose firmware keeps `LVP` = 1, and the jig firmware doesn't implement its
+  entry yet. The wiring and protocol are documented in
+  [Low-voltage programming (LVP)](#low-voltage-programming-lvp).
 - **3.3 V targets only.** 5 V targets are out of scope.
 - Other PIC families, a jig-assigned serial number, authentication and
   per-board logging beyond the saved settings files are out of scope.

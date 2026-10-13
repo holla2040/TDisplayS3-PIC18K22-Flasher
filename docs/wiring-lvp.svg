@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800" font-family="DejaVu Sans, Arial, sans-serif">
+<defs><linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2f2"/><stop offset=".5" stop-color="#b9bcc0"/><stop offset="1" stop-color="#8d9196"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7dc8c"/><stop offset="1" stop-color="#c9a13b"/></linearGradient><radialGradient id="glow"><stop offset="0" stop-color="#b6ff9e"/><stop offset=".4" stop-color="#3fdc3a" stop-opacity=".9"/><stop offset="1" stop-color="#3fdc3a" stop-opacity="0"/></radialGradient></defs>
+<rect width="1200" height="800" rx="14" fill="#f4f4f1"/>
+<text x="40" y="44" font-size="22" fill="#222" text-anchor="start" font-weight="bold" >T-Display S3 → PIC18(L)F K22, LVP ICSP</text>
+<text x="40" y="66" font-size="13" fill="#666" text-anchor="start" font-weight="normal" >Target firmware keeps LVP = 1 and MCLRE = 1. No VPP: MCLR moves only between GND (Q1) and VDD (the target's pull-up).</text>
+<rect x="84" y="105" width="153" height="374" rx="7" fill="#000" opacity=".18"/><rect x="80" y="100" width="153" height="374" rx="7" fill="#151515"/>
+<rect x="83" y="148.0" width="10" height="10" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="153.0" r="2.1" fill="#2a2a2a"/>
+<rect x="220" y="148.0" width="10" height="10" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="153.0" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="155.5" font-size="6" fill="#ddd">GND</text>
+<text x="219" y="155.5" font-size="6" fill="#ddd" text-anchor="end">3V</text>
+<circle cx="88" cy="168.24" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="168.24" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="168.24" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="168.24" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="170.74" font-size="6" fill="#ddd">GND</text>
+<text x="219" y="170.74" font-size="6" fill="#ddd" text-anchor="end">1</text>
+<circle cx="88" cy="183.48" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="183.48" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="183.48" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="183.48" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="185.98" font-size="6" fill="#ddd">43</text>
+<text x="219" y="185.98" font-size="6" fill="#ddd" text-anchor="end">2</text>
+<circle cx="88" cy="198.72" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="198.72" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="198.72" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="198.72" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="201.22" font-size="6" fill="#ddd">44</text>
+<text x="219" y="201.22" font-size="6" fill="#ddd" text-anchor="end">3</text>
+<circle cx="88" cy="213.96" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="213.96" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="213.96" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="213.96" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="216.46" font-size="6" fill="#ddd">18</text>
+<text x="219" y="216.46" font-size="6" fill="#ddd" text-anchor="end">10</text>
+<circle cx="88" cy="229.2" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="229.2" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="229.2" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="229.2" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="231.7" font-size="6" fill="#ddd">17</text>
+<text x="219" y="231.7" font-size="6" fill="#ddd" text-anchor="end">11</text>
+<circle cx="88" cy="244.44" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="244.44" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="244.44" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="244.44" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="246.94" font-size="6" fill="#ddd">21</text>
+<text x="219" y="246.94" font-size="6" fill="#ddd" text-anchor="end">12</text>
+<circle cx="88" cy="259.68" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="259.68" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="259.68" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="259.68" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="262.18" font-size="6" fill="#ddd">16</text>
+<text x="219" y="262.18" font-size="6" fill="#ddd" text-anchor="end">13</text>
+<circle cx="88" cy="274.92" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="274.92" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="274.92" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="274.92" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="277.42" font-size="6" fill="#ddd">NC</text>
+<text x="219" y="277.42" font-size="6" fill="#ddd" text-anchor="end">NC</text>
+<circle cx="88" cy="290.15999999999997" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="290.15999999999997" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="290.15999999999997" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="290.15999999999997" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="292.65999999999997" font-size="6" fill="#ddd">GND</text>
+<text x="219" y="292.65999999999997" font-size="6" fill="#ddd" text-anchor="end">NC</text>
+<circle cx="88" cy="305.4" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="305.4" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="305.4" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="305.4" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="307.9" font-size="6" fill="#ddd">GND</text>
+<text x="219" y="307.9" font-size="6" fill="#ddd" text-anchor="end">GND</text>
+<circle cx="88" cy="320.64" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="88" cy="320.64" r="2.1" fill="#2a2a2a"/>
+<circle cx="225" cy="320.64" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="225" cy="320.64" r="2.1" fill="#2a2a2a"/>
+<text x="94" y="323.14" font-size="6" fill="#ddd">3V</text>
+<text x="219" y="323.14" font-size="6" fill="#ddd" text-anchor="end">5V</text>
+<text x="156.5" y="122" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle" letter-spacing="1">LILYGO</text>
+<rect x="107" y="134" width="99" height="258" rx="3" fill="#050608" stroke="#2c2f33"/>
+<rect x="112" y="144" width="89" height="238" fill="#000"/>
+<g transform="translate(156.5,263.0) rotate(-90)" font-family="DejaVu Sans Mono, monospace" font-size="13">
+<text x="-109.0" y="-24.5" fill="#fff">PIC18F46K22</text>
+<text x="-109.0" y="-3.5" fill="#fff">id 0123456789ABCDEF</text>
+<text x="-109.0" y="17.5" fill="#fff">pass 2 fail 0</text>
+<text x="-109.0" y="38.5" fill="#8a8a8a">192.168.1.50</text>
+</g>
+<rect x="96" y="434" width="20" height="20" rx="2" fill="url(#silver)"/><circle cx="106" cy="444" r="5.5" fill="#333"/>
+<text x="106" y="466" font-size="7" fill="#bbb" text-anchor="middle">BOOT</text>
+<rect x="197" y="434" width="20" height="20" rx="2" fill="url(#silver)"/><circle cx="207" cy="444" r="5.5" fill="#333"/>
+<text x="207" y="466" font-size="7" fill="#bbb" text-anchor="middle">IO14</text>
+<rect x="129.5" y="448" width="54" height="32" rx="9" fill="url(#silver)" stroke="#777"/><rect x="137.5" y="460" width="38" height="11" rx="5" fill="#2b2b2b"/>
+<text x="156.5" y="500" font-size="13" fill="#333" text-anchor="middle" font-weight="bold">LilyGO T-Display S3</text>
+<rect x="1020" y="219" width="168" height="212" rx="4" fill="#000" opacity=".18"/>
+<rect x="1016" y="215" width="168" height="212" rx="4" fill="#1d4f9e"/>
+<rect x="1027" y="240" width="10" height="10" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="1032" cy="245" r="2.1" fill="#2a2a2a"/>
+<text x="1046" y="249" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="bold" >1</text>
+<text x="1062" y="249" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="normal" >MCLR</text>
+<circle cx="1032" cy="275" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="1032" cy="275" r="2.1" fill="#2a2a2a"/>
+<text x="1046" y="279" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="bold" >2</text>
+<text x="1062" y="279" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="normal" >VDD</text>
+<circle cx="1032" cy="305" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="1032" cy="305" r="2.1" fill="#2a2a2a"/>
+<text x="1046" y="309" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="bold" >3</text>
+<text x="1062" y="309" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="normal" >GND</text>
+<circle cx="1032" cy="335" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="1032" cy="335" r="2.1" fill="#2a2a2a"/>
+<text x="1046" y="339" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="bold" >4</text>
+<text x="1062" y="339" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="normal" >PGD</text>
+<circle cx="1032" cy="365" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="1032" cy="365" r="2.1" fill="#2a2a2a"/>
+<text x="1046" y="369" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="bold" >5</text>
+<text x="1062" y="369" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="normal" >PGC</text>
+<circle cx="1032" cy="395" r="5" fill="url(#gold)" stroke="#9a7a22" stroke-width=".8"/>
+<circle cx="1032" cy="395" r="2.1" fill="#2a2a2a"/>
+<text x="1046" y="399" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="bold" >6</text>
+<text x="1062" y="399" font-size="12" fill="#e8eefc" text-anchor="start" font-weight="normal" >NC</text>
+<text x="1100" y="448" font-size="1" fill="#333" text-anchor="start" font-weight="normal" ></text>
+<text x="1100" y="452" font-size="13" fill="#333" text-anchor="middle" font-weight="bold" >Target ICSP header</text>
+<text x="1100" y="468" font-size="11" fill="#555" text-anchor="middle" font-weight="normal" >6-pin, pin 1 = MCLR, no PGM pin</text>
+<path d="M225,153.0 L940,153.0 L940,275 L1032,275" fill="none" stroke="#8e1c1a" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,153.0 L940,153.0 L940,275 L1032,275" fill="none" stroke="#e53935" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,168.24 L900,168.24 L900,335 L1032,335" fill="none" stroke="#9a6f00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,168.24 L900,168.24 L900,335 L1032,335" fill="none" stroke="#f5b400" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,183.48 L860,183.48 L860,365 L1032,365" fill="none" stroke="#165a91" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,183.48 L860,183.48 L860,365 L1032,365" fill="none" stroke="#2e9bf0" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="225" cy="153.0" r="4" fill="#e53935" stroke="#8e1c1a" stroke-width="1.2"/>
+<circle cx="1032" cy="275" r="4" fill="#e53935" stroke="#8e1c1a" stroke-width="1.2"/>
+<circle cx="225" cy="168.24" r="4" fill="#f5b400" stroke="#9a6f00" stroke-width="1.2"/>
+<circle cx="1032" cy="335" r="4" fill="#f5b400" stroke="#9a6f00" stroke-width="1.2"/>
+<circle cx="225" cy="183.48" r="4" fill="#2e9bf0" stroke="#165a91" stroke-width="1.2"/>
+<circle cx="1032" cy="365" r="4" fill="#2e9bf0" stroke="#165a91" stroke-width="1.2"/>
+<path d="M225,198.72 L300,198.72 L300,540 L610,540" fill="none" stroke="#1b6b31" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,198.72 L300,198.72 L300,540 L610,540" fill="none" stroke="#2fa84f" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="225" cy="198.72" r="4" fill="#2fa84f" stroke="#1b6b31" stroke-width="1.2"/>
+<text x="240" y="217.5" font-size="10" fill="#888" text-anchor="start" font-weight="normal" >unused</text>
+<path d="M225,305.4 L245,305.4" fill="none" stroke="#000" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M225,305.4 L245,305.4" fill="none" stroke="#2b2b2b" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="225" cy="305.4" r="4" fill="#2b2b2b" stroke="#000" stroke-width="1.2"/>
+<g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="245" y1="306.4" x2="245" y2="312.4"/><line x1="235" y1="312.4" x2="255" y2="312.4"/><line x1="239" y1="317.4" x2="251" y2="317.4"/><line x1="242.5" y1="322.4" x2="247.5" y2="322.4"/></g>
+<path d="M1032,305 L1000,305" fill="none" stroke="#000" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1032,305 L1000,305" fill="none" stroke="#2b2b2b" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1032" cy="305" r="4" fill="#2b2b2b" stroke="#000" stroke-width="1.2"/>
+<g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="1000" y1="306" x2="1000" y2="312"/><line x1="990" y1="312" x2="1010" y2="312"/><line x1="994" y1="317" x2="1006" y2="317"/><line x1="997.5" y1="322" x2="1002.5" y2="322"/></g>
+<text x="328" y="238" font-size="12" fill="#777" text-anchor="start" font-weight="bold" >Not fitted for LVP</text>
+<text x="328" y="255" font-size="11" fill="#777" text-anchor="start" font-weight="normal" >5V→8.5V boost, Q2, Q3, R3–R6</text>
+<text x="328" y="270" font-size="11" fill="#777" text-anchor="start" font-weight="normal" >Same jig board: the HV parts are left off.</text>
+<text x="328" y="285" font-size="11" fill="#777" text-anchor="start" font-weight="normal" >GPIO10 (VPP_ON) is not connected.</text>
+<path d="M770,372 L770,330" fill="none" stroke="#777" stroke-width="2.2" stroke-dasharray="5 4" stroke-linecap="round"/>
+<rect x="764" y="294" width="12" height="36" fill="#fff" stroke="#777" stroke-width="1.8" stroke-dasharray="5 4"/>
+<path d="M770,294 L770,262" fill="none" stroke="#777" stroke-width="2.2" stroke-dasharray="5 4" stroke-linecap="round"/>
+<g stroke="#777" stroke-width="2.2" stroke-linecap="round"><line x1="760" y1="262" x2="780" y2="262"/></g>
+<text x="770" y="254" font-size="11" fill="#555" text-anchor="middle" font-weight="bold" >VDD</text>
+<text x="756" y="308" font-size="11.5" fill="#222" text-anchor="end" font-weight="bold" >10 kΩ pull-up</text>
+<text x="756" y="322" font-size="10.5" fill="#555" text-anchor="end" font-weight="normal" >on the target</text>
+<text x="756" y="336" font-size="10.5" fill="#555" text-anchor="end" font-weight="normal" >(not the jig)</text>
+<circle cx="770" cy="372" r="3.6" fill="#444"/>
+<circle cx="658" cy="372" r="4" fill="#00a99d" stroke="#00665f" stroke-width="1.2"/>
+<text x="676" y="366" font-size="12" fill="#00665f" text-anchor="start" font-weight="bold" >MCLR</text>
+<path d="M658,372 L658,422" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="652" y="422" width="12" height="36" fill="#fff" stroke="#444" stroke-width="1.8"/>
+<path d="M658,458 L658,500" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="676" y="436" font-size="11.5" fill="#222" text-anchor="start" font-weight="bold" >R2 100 Ω</text>
+<circle cx="648" cy="540" r="27" fill="#fff" stroke="#bbb" stroke-width="1.2"/>
+<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="636" y1="528" x2="636" y2="552"/><line x1="610" y1="540" x2="636" y2="540"/><line x1="642" y1="526" x2="642" y2="534" stroke-width="3.2"/><line x1="642" y1="536" x2="642" y2="544" stroke-width="3.2"/><line x1="642" y1="546" x2="642" y2="554" stroke-width="3.2"/><polyline points="642,530 658,530 658,500"/><polyline points="642,550 658,550 658,580"/><polyline points="648,540 658,540 658,550"/></g><polygon points="643,540 650,536 650,544" fill="#444"/>
+<text x="678" y="538" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q1 N-MOSFET</text>
+<text x="678" y="552" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >AO3400A, SOT-23</text>
+<path d="M658,580 L658,590" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="658" y1="590" x2="658" y2="596"/><line x1="648" y1="596" x2="668" y2="596"/><line x1="652" y1="601" x2="664" y2="601"/><line x1="655.5" y1="606" x2="660.5" y2="606"/></g>
+<rect x="402" y="534" width="36" height="12" fill="#fff" stroke="#444" stroke-width="1.8"/>
+<text x="420" y="564" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R1 1 kΩ</text>
+<path d="M658,372 L820,372 L820,245 L853,245 A7,7 0 0 1 867,245 L893,245 A7,7 0 0 1 907,245 L933,245 A7,7 0 0 1 947,245 L1032,245" fill="none" stroke="#00665f" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M658,372 L820,372 L820,245 L853,245 A7,7 0 0 1 867,245 L893,245 A7,7 0 0 1 907,245 L933,245 A7,7 0 0 1 947,245 L1032,245" fill="none" stroke="#00a99d" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1032" cy="245" r="4" fill="#00a99d" stroke="#00665f" stroke-width="1.2"/>
+<text transform="translate(313,330) rotate(-90)" font-size="11" fill="#1b6b31" text-anchor="middle" font-weight="bold">GPIO3 · MCLR_LOW</text>
+<line x1="340" y1="650" x2="368" y2="650" stroke="#8e1c1a" stroke-width="7" stroke-linecap="round"/><line x1="340" y1="650" x2="368" y2="650" stroke="#e53935" stroke-width="4.6" stroke-linecap="round"/>
+<text x="380" y="654.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >3V3 → ICSP 2 (VDD)</text>
+<line x1="340" y1="676" x2="368" y2="676" stroke="#9a6f00" stroke-width="7" stroke-linecap="round"/><line x1="340" y1="676" x2="368" y2="676" stroke="#f5b400" stroke-width="4.6" stroke-linecap="round"/>
+<text x="380" y="680.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO1 → ICSP 4 (PGD)</text>
+<line x1="340" y1="702" x2="368" y2="702" stroke="#165a91" stroke-width="7" stroke-linecap="round"/><line x1="340" y1="702" x2="368" y2="702" stroke="#2e9bf0" stroke-width="4.6" stroke-linecap="round"/>
+<text x="380" y="706.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO2 → ICSP 5 (PGC)</text>
+<line x1="340" y1="728" x2="368" y2="728" stroke="#1b6b31" stroke-width="7" stroke-linecap="round"/><line x1="340" y1="728" x2="368" y2="728" stroke="#2fa84f" stroke-width="4.6" stroke-linecap="round"/>
+<text x="380" y="732.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO3 MCLR_LOW → R1 → Q1 gate</text>
+<line x1="670" y1="650" x2="698" y2="650" stroke="#00665f" stroke-width="7" stroke-linecap="round"/><line x1="670" y1="650" x2="698" y2="650" stroke="#00a99d" stroke-width="4.6" stroke-linecap="round"/><text x="710" y="654.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >MCLR net: Q1 via R2 → ICSP 1</text>
+<line x1="670" y1="676" x2="698" y2="676" stroke="#777" stroke-width="2.2" stroke-dasharray="5 4"/><text x="710" y="680.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >Dashed: on the target board</text>
+<line x1="670" y1="702" x2="698" y2="702" stroke="#000" stroke-width="7" stroke-linecap="round"/><line x1="670" y1="702" x2="698" y2="702" stroke="#2b2b2b" stroke-width="4.6" stroke-linecap="round"/><text x="710" y="706.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GND symbols: one common net</text>
+<rect x="848" y="478" width="332" height="148" rx="6" fill="#fff" stroke="#c9c9c2"/>
+<text x="860" y="496" font-size="13" fill="#222" text-anchor="start" font-weight="bold" >LVP entry / exit (DS41398B §2.6)</text>
+<text x="860" y="518" font-size="11.5" fill="#444" text-anchor="start" font-weight="normal" >Q1 on: MCLR to VIL. Wait P18 ≥ 1 ms.</text>
+<text x="860" y="535" font-size="11.5" fill="#444" text-anchor="start" font-weight="normal" >Key 4D434850h on PGD, 32 bits, MSb first.</text>
+<text x="860" y="552" font-size="11.5" fill="#444" text-anchor="start" font-weight="normal" >Q1 off: pull-up lifts MCLR to VIH (P20 ≥ 40 ns).</text>
+<text x="860" y="569" font-size="11.5" fill="#444" text-anchor="start" font-weight="normal" >Wait P15 ≥ 400 µs, then the usual LSb-first frames.</text>
+<text x="860" y="586" font-size="11.5" fill="#444" text-anchor="start" font-weight="normal" >Exit: Q1 on (P16 ≥ 0 after the last PGC).</text>
+<text x="860" y="603" font-size="11.5" fill="#a04f00" text-anchor="start" font-weight="bold" >Not in the jig firmware yet: icsp.cpp is HV only.</text>
+</svg>

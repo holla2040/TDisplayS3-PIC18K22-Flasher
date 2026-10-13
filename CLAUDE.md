@@ -65,7 +65,7 @@ floats, so MCLR is undefined for ~300 ms at jig boot.
 - Auto mode runs `flash.txt` once per insertion (`flashed`, set after ANY outcome including comm error, cleared together with `lastResult` after `MISSES_GONE` = 3 "no target" probes in a row, ~3 s, OR when a user ID different from `flashedId` shows on two consecutive probes: a quick swap to a different board is run). `runTests` sets `flashedId` to the ID the run started on (no post-run probe, so one bad read can't reflash a seated board, and a swap during the result hold is still caught); a run that changes the ID (blank after an interruption) gets one more run, which stops at `blank userid` without touching the chip. A board left on the jig is never reflashed, even across one bad probe or one misread ID.
 - Uploading a file never runs anything. `POST /run` (only `*.txt`, else 400) is the only HTTP way to start a script; the loop runs it (`wantRun`).
 - WiFi is secondary: flashing must never wait on it (WiFiManager non-blocking). Nothing is authenticated (same as the siblings).
-- HV only. No LVP (needs LVP and MCLRE both on; field firmware often disables one).
+- Firmware is HV only. LVP (factory default on; only HV can change the bit; MCLR is always enabled in LVP mode regardless of MCLRE) is documented in README "Low-voltage programming (LVP)" with `docs/wiring-lvp.png`, but `icsp.cpp` has no LVP entry yet. Firmware that sets `LVP = OFF` needs HV.
 
 ## Current state / caveats
 

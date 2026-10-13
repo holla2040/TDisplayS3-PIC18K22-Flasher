@@ -42,8 +42,10 @@ Device table (device ID & 0xFFE0, from the pack; F / LF):
 - VPP 7.8–9.0 V at VDD 3.3 V (DS41398B D110: VDD + 4.5 V min, 9.0 V max; default 9.0). VDD 1.8–5.5 V (LF parts: 1.8–3.6 V).
 - Write row 64 bytes. Waits: bulk erase 15 ms, row program 1 ms, config 5 ms,
   EEPROM byte 4 ms, user ID 5 ms.
-- Low-voltage programming needs both `LVP=ON` and `MCLRE=EXTMCLR`; field
-  firmware commonly disables one of them, so the jig uses HV programming only.
+- Low-voltage programming needs `LVP=ON`; field firmware commonly turns it
+  off, so the jig uses HV programming only. (Revised 2026-10-13: MCLRE does
+  not matter, MCLR is always enabled in LVP mode. LVP wiring and protocol are
+  now documented in the README; the firmware still does HV only.)
 - The K22 has no factory unique ID. The per-board identity is the 8 user-ID
   bytes, programmed by the board's firmware build or by MPLAB.
 
@@ -212,5 +214,6 @@ probe (a few ms), once a second, the same tradeoff as the STM8 jig.
 
 ## Out of scope
 
-5 V targets; PIC families other than K22; LVP; a jig-assigned serial number;
+5 V targets; PIC families other than K22; LVP in the firmware (documented in
+the README, not implemented); a jig-assigned serial number;
 authentication; per-board logging beyond the settings files.
