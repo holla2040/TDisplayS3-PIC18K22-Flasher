@@ -87,8 +87,9 @@ PGC/PGD released to inputs (P16 = 0: no PGC edge between the last frame and MCLR
 
 LVP entry (key 4D434850h on PGD, MSb first, with MCLR at VIL; DS41398B §2.6) is
 not implemented. The README's [Low-voltage programming (LVP)](../README.md#low-voltage-programming-lvp)
-section has the wiring (Q1 only; no boost, Q2/Q3, R3-R6, GPIO10 unused) and the
-entry/exit sequence for targets whose firmware keeps `LVP` = 1 and `MCLRE` = 1.
+section has the wiring (five wires: GPIO3 drives MCLR directly, no boost, no
+transistors, GPIO10 unused) and the entry/exit sequence for targets that keep
+`LVP` = 1 (any `MCLRE`). LVP is the mode for the Trace boards.
 
 `icsp_release()` turns MCLR_LOW off so the target runs. It does nothing while
 VPP_ON is set, so it can't be used mid-session. After `icsp_exit()` the target is
