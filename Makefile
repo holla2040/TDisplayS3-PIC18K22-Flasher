@@ -32,6 +32,7 @@ ota:
 test:
 	g++ -I. -x c++ tests/test_ihx.c ihx.cpp -o $(BUILD)-t1 && $(BUILD)-t1
 	g++ -I. -x c++ tests/test_script.c script.cpp ihx.cpp -o $(BUILD)-t2 && $(BUILD)-t2
+	g++ -I. -DHOST_TEST -x c++ tests/test_parts.c pic18k22.cpp -o $(BUILD)-t3 && $(BUILD)-t3
 
 clean:
 	rm -rf $(BUILD)
