@@ -75,6 +75,16 @@ static bool parse(char *line, cmd *c) {
   return false;
 }
 
+// Reads and parses the next line into raw (for progress) and line (tokens).
+// False at the end; *ok = false on a syntax error or an overlong line.
+static bool next_cmd(const char **p, char *raw, char *line, cmd *k, bool *ok) {
+  bool fit;
+  if (!next_line(p, raw, LINE_MAX_LEN, &fit)) return false;
+  strcpy(line, raw);
+  *ok = parse(line, k) && fit;
+  return true;
+}
+
 // Copies src to out, replacing {id}. False if it doesn't fit.
 static bool expand(const char *src, const char *id, char *out, size_t n) {
   size_t o = 0, idlen = strlen(id);
@@ -99,6 +109,13 @@ struct ctx {
 };
 
 static bool any_mask(const ihx_region *g) { return g->size && memchr(g->mask, 1, g->size); }
+
+// ICSP has no ACK and a missing target reads zeros, so the device ID is the only
+// way to tell a pulled or swapped board from a bad one.
+static bool present(const pic_ops *d) {
+  uint16_t id = d->devid();
+  return id != 0x0000 && id != 0xFFFF && (id & 0xFFE0) == d->part_id;
+}
 
 static script_status do_read(ctx *c, int line, const cmd *k, const char *name) {
   const pic_ops *d = c->dev;
@@ -146,7 +163,9 @@ static script_status do_verify(ctx *c, int line, const char *name) {
       if (!g->mask[i]) continue;
       uint8_t diff = g->data[i] ^ c->scratch[i];
       if (r == IHX_CONFIG && i < 14) diff &= c->dev->config_mask[i];   // unimplemented bits don't count
-      if (diff) return status(SCRIPT_FAIL, line, "verify 0x%06X", (unsigned)(g->base + i));
+      if (!diff) continue;
+      if (!present(c->dev)) return status(SCRIPT_COMM, line, "no target");   // not a FAIL: the board left
+      return status(SCRIPT_FAIL, line, "verify 0x%06X", (unsigned)(g->base + i));
     }
   }
   return s;
@@ -156,11 +175,9 @@ static script_status exec(ctx *c, const char *script, const char *id,
                           void (*progress)(int, const char *)) {
   const char *p = script;
   char raw[LINE_MAX_LEN], line[LINE_MAX_LEN], name[NAME_MAX_LEN];
-  bool fit;
-  for (int n = 1; next_line(&p, raw, sizeof raw, &fit); n++) {
-    cmd k;
-    strcpy(line, raw);
-    parse(line, &k);   // already validated by script_run
+  cmd k;
+  bool ok;   // already validated by script_run
+  for (int n = 1; next_cmd(&p, raw, line, &k, &ok); n++) {
     if (k.op == OP_NONE) continue;
     if (progress) progress(n, raw);
     if (k.arg && !expand(k.arg, id, name, sizeof name)) return status(SCRIPT_ERROR, n, "syntax");
@@ -179,30 +196,43 @@ static script_status exec(ctx *c, const char *script, const char *id,
   return status(SCRIPT_PASS, 0);
 }
 
-// Every write/verify file must exist on fs or be saved by an earlier read in the script,
-// so a missing firmware.hex is caught before erase chip rather than after.
-static script_status preflight(const char *script, const fs_ops *fs, const char *id) {
+// The region of the last read before script line n that saves name; -1 if none.
+static int made_earlier(const char *script, int n, const char *id, const char *name) {
   const char *p = script;
-  char raw[LINE_MAX_LEN], line[LINE_MAX_LEN], name[NAME_MAX_LEN], prev[NAME_MAX_LEN];
-  bool fit;
-  for (int n = 1; next_line(&p, raw, sizeof raw, &fit); n++) {
-    cmd k;
-    strcpy(line, raw);
-    parse(line, &k);
-    if (k.op != OP_WRITE && k.op != OP_VERIFY) continue;
+  char raw[LINE_MAX_LEN], line[LINE_MAX_LEN], prev[NAME_MAX_LEN];
+  cmd k;
+  bool ok;
+  int region = -1;
+  for (int m = 1; m < n && next_cmd(&p, raw, line, &k, &ok); m++)
+    if (k.op == OP_READ && expand(k.arg, id, prev, sizeof prev) && !strcmp(prev, name)) region = k.region;
+  return region;
+}
+
+// Before anything changes the chip: every name must expand, and every write/verify
+// file must exist and parse against the detected part (or be saved by an earlier
+// read). So a missing or oversize firmware.hex stops before erase chip, not after.
+// A write carrying user-ID bytes before a later user-ID write (firmware.hex with
+// IDLOC records) would refill the ID early and defeat "userid written last".
+static script_status preflight(ctx *c, const char *script, const char *id) {
+  const char *p = script;
+  char raw[LINE_MAX_LEN], line[LINE_MAX_LEN], name[NAME_MAX_LEN];
+  cmd k;
+  bool ok;
+  int uid_line = 0;   // first write line that carries user-ID bytes
+  for (int n = 1; next_cmd(&p, raw, line, &k, &ok); n++) {
+    if (!k.arg) continue;
     if (!expand(k.arg, id, name, sizeof name)) return status(SCRIPT_ERROR, n, "syntax");
-    bool made = false;
-    const char *q = script;
-    for (int m = 1; m < n && next_line(&q, raw, sizeof raw, &fit); m++) {
-      cmd j;
-      strcpy(line, raw);
-      parse(line, &j);
-      if (j.op == OP_READ && expand(j.arg, id, prev, sizeof prev) && !strcmp(prev, name)) made = true;
+    if (k.op == OP_READ) continue;
+    int made = made_earlier(script, n, id, name);
+    bool uid = made == IHX_USERID;
+    if (made < 0) {
+      script_status s = load_hex(c, n, name);
+      if (s.result != SCRIPT_PASS) return s;
+      uid = any_mask(&c->img.r[IHX_USERID]);
     }
-    if (made) continue;
-    char *txt = fs->load(name);
-    if (!txt) return status(SCRIPT_ERROR, n, "no %s", name);
-    free(txt);
+    if (k.op != OP_WRITE || !uid) continue;
+    if (uid_line) return status(SCRIPT_ERROR, uid_line, "firmware has userid");
+    uid_line = n;
   }
   return status(SCRIPT_PASS, 0);
 }
@@ -212,14 +242,16 @@ script_status script_run(const char *script, const pic_ops *dev, const fs_ops *f
   // Check the whole script first so a typo on line 9 can't leave the chip erased.
   const char *p = script;
   char raw[LINE_MAX_LEN], line[LINE_MAX_LEN];
-  bool fit;
-  int id_line = 0;
-  for (int n = 1; next_line(&p, raw, sizeof raw, &fit); n++) {
-    cmd k;
-    strcpy(line, raw);
-    if (!fit || !parse(line, &k)) return status(SCRIPT_ERROR, n, "syntax");
+  cmd k;
+  bool ok;
+  int id_line = 0, ee_line = 0;
+  for (int n = 1; next_cmd(&p, raw, line, &k, &ok); n++) {
+    if (!ok) return status(SCRIPT_ERROR, n, "syntax");
     if (!id_line && strstr(raw, "{id}")) id_line = n;
+    if (!ee_line && k.op == OP_READ && k.region == IHX_EEPROM) ee_line = n;
   }
+
+  if (!present(dev)) return status(SCRIPT_COMM, 0, "no target");
 
   // {id} is read once, up front, because erase chip wipes the user ID.
   char id[17] = "";
@@ -234,8 +266,8 @@ script_status script_run(const char *script, const pic_ops *dev, const fs_ops *f
     if (blank) return status(SCRIPT_ERROR, id_line, "blank userid");
   }
 
-  script_status pre = preflight(script, fs, id);
-  if (pre.result != SCRIPT_PASS) return pre;
+  // Once, before any line runs, so no line order can save files or erase first.
+  if (ee_line && dev->ee_locked()) return status(SCRIPT_ERROR, ee_line, "EE locked");
 
   // One allocation: data + mask per region, then the read-back buffer.
   size_t total = 0, biggest = 0;
@@ -251,7 +283,8 @@ script_status script_run(const char *script, const pic_ops *dev, const fs_ops *f
     c.img.r[r] = {REGION_BASE[r], dev->size[r], q, q + dev->size[r]};
     q += 2 * (size_t)dev->size[r];
   }
-  script_status s = exec(&c, script, id, progress);
+  script_status s = preflight(&c, script, id);
+  if (s.result == SCRIPT_PASS) s = exec(&c, script, id, progress);
   free(mem);
   return s;
 }

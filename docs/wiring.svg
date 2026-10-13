@@ -147,59 +147,51 @@
 <circle cx="1032" cy="305" r="4" fill="#2b2b2b" stroke="#000" stroke-width="1.2"/>
 <g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="1000" y1="306" x2="1000" y2="312"/><line x1="990" y1="312" x2="1010" y2="312"/><line x1="994" y1="317" x2="1006" y2="317"/><line x1="997.5" y1="322" x2="1002.5" y2="322"/></g>
 <rect x="335" y="214" width="110" height="44" rx="5" fill="#fbeccf" stroke="#a04f00" stroke-width="1.6"/>
-<text x="390" y="234" font-size="12.5" fill="#5a3000" text-anchor="middle" font-weight="bold" >9 V supply</text>
-<text x="390" y="249" font-size="11" fill="#5a3000" text-anchor="middle" font-weight="normal" >external</text>
+<text x="390" y="234" font-size="12.5" fill="#5a3000" text-anchor="middle" font-weight="bold" >5V→8.5V boost</text>
+<text x="390" y="249" font-size="11" fill="#5a3000" text-anchor="middle" font-weight="normal" >on-board, 5V in</text>
 <text x="456" y="229" font-size="14" fill="#a04f00" text-anchor="start" font-weight="bold" >+</text>
 <text x="398" y="254" font-size="1" fill="#333" text-anchor="start" font-weight="normal" ></text>
 <line x1="390" y1="258" x2="390" y2="272" stroke="#444" stroke-width="2.4"/>
 <g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="390" y1="272" x2="390" y2="278"/><line x1="380" y1="278" x2="400" y2="278"/><line x1="384" y1="283" x2="396" y2="283"/><line x1="387.5" y1="288" x2="392.5" y2="288"/></g>
 <text x="404" y="281" font-size="13" fill="#a04f00" text-anchor="start" font-weight="bold" >−</text>
+<text x="328" y="304" font-size="10.5" fill="#a04f00" text-anchor="start" font-weight="bold" >VPP on MCLR: 7.8–9.0 V at VDD 3.3 V</text>
+<text x="328" y="317" font-size="10.5" fill="#a04f00" text-anchor="start" font-weight="normal" >(VDD+4.5 V min; boost set to 8.5 V)</text>
+<text x="328" y="330" font-size="10.5" fill="#5a3000" text-anchor="start" font-weight="normal" >check at bring-up: unloaded and VPP on</text>
+<text x="328" y="343" font-size="10.5" fill="#5a3000" text-anchor="start" font-weight="normal" >abs max 11 V</text>
 <path d="M445,235 L658,235" fill="none" stroke="#a04f00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
 <path d="M445,235 L658,235" fill="none" stroke="#f57c00" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="445" cy="235" r="4" fill="#f57c00" stroke="#a04f00" stroke-width="1.2"/>
-<text x="560" y="226" font-size="12" fill="#a04f00" text-anchor="middle" font-weight="bold" >+9 V</text>
+<text x="560" y="226" font-size="12" fill="#a04f00" text-anchor="middle" font-weight="bold" >+8.5 V</text>
 <circle cx="648" cy="310" r="27" fill="#fff" stroke="#bbb" stroke-width="1.2"/>
-<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<line x1="640" y1="296" x2="640" y2="324" stroke-width="3.6"/>
-<line x1="610" y1="310" x2="640" y2="310"/>
-<polyline points="640,303 658,288 658,270"/>
-<polyline points="640,317 658,332 658,350"/>
-</g>
-<polygon points="644.5,299.5 648.3,291.6 653.0,297.1" fill="#444"/>
-<text x="678" y="306" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q3 PNP</text>
-<text x="678" y="320" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >2N3906 / MMBT3906</text>
+<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="636" y1="298" x2="636" y2="322"/><line x1="610" y1="310" x2="636" y2="310"/><line x1="642" y1="296" x2="642" y2="304" stroke-width="3.2"/><line x1="642" y1="306" x2="642" y2="314" stroke-width="3.2"/><line x1="642" y1="316" x2="642" y2="324" stroke-width="3.2"/><polyline points="642,300 658,300 658,270"/><polyline points="642,320 658,320 658,350"/><polyline points="642,310 650,310"/><polyline points="658,310 658,300"/></g><polygon points="658,310 650,306 650,314" fill="#444"/>
+<text x="678" y="306" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q3 P-MOSFET</text>
+<text x="678" y="320" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >AO3401A, SOT-23</text>
 <path d="M580,235 L580,254" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <rect x="574" y="254" width="12" height="36" fill="#fff" stroke="#444" stroke-width="1.8"/>
 <path d="M580,290 L580,310" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="580" cy="235" r="3.6" fill="#444"/>
 <circle cx="580" cy="310" r="3.6" fill="#444"/>
 <text x="568" y="268" font-size="11.5" fill="#222" text-anchor="end" font-weight="bold" >R6</text>
-<text x="568" y="281" font-size="10.5" fill="#555" text-anchor="end" font-weight="normal" >10 kΩ</text>
+<text x="568" y="281" font-size="10.5" fill="#555" text-anchor="end" font-weight="normal" >1 kΩ</text>
 <path d="M580,310 L610,310" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <path d="M658,270 L658,235" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="658" cy="235" r="3.6" fill="#444"/>
 <path d="M658,350 L658,372" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="488" cy="420" r="27" fill="#fff" stroke="#bbb" stroke-width="1.2"/>
-<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<line x1="480" y1="406" x2="480" y2="434" stroke-width="3.6"/>
-<line x1="450" y1="420" x2="480" y2="420"/>
-<polyline points="480,413 498,398 498,380"/>
-<polyline points="480,427 498,442 498,460"/>
-</g>
-<polygon points="496.2,440.5 487.7,438.1 492.4,432.6" fill="#444"/>
-<text x="518" y="418" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q2 NPN</text>
-<text x="518" y="432" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >2N3904 / MMBT3904</text>
+<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="476" y1="408" x2="476" y2="432"/><line x1="450" y1="420" x2="476" y2="420"/><line x1="482" y1="406" x2="482" y2="414" stroke-width="3.2"/><line x1="482" y1="416" x2="482" y2="424" stroke-width="3.2"/><line x1="482" y1="426" x2="482" y2="434" stroke-width="3.2"/><polyline points="482,410 498,410 498,380"/><polyline points="482,430 498,430 498,460"/><polyline points="488,420 498,420 498,430"/></g><polygon points="483,420 490,416 490,424" fill="#444"/>
+<text x="518" y="418" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q2 N-MOSFET</text>
+<text x="518" y="432" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >AO3400A, SOT-23</text>
 <path d="M498,460 L498,470" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="498" y1="470" x2="498" y2="476"/><line x1="488" y1="476" x2="508" y2="476"/><line x1="492" y1="481" x2="504" y2="481"/><line x1="495.5" y1="486" x2="500.5" y2="486"/></g>
 <path d="M498,380 L498,360 L527,360" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <rect x="527" y="354" width="36" height="12" fill="#fff" stroke="#444" stroke-width="1.8"/>
 <path d="M563,360 L580,360 L580,310" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
-<text x="545" y="346" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R5 10 kΩ</text>
+<text x="545" y="346" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R5 1 kΩ</text>
 <text x="545" y="374" font-size="1" fill="#333" text-anchor="start" font-weight="normal" ></text>
 <path d="M345,420 L377,420" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <rect x="377" y="414" width="36" height="12" fill="#fff" stroke="#444" stroke-width="1.8"/>
 <path d="M413,420 L450,420" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
-<text x="395" y="407" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R3 4.7 kΩ</text>
+<text x="395" y="407" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R3 1 kΩ</text>
 <circle cx="345" cy="420" r="3.6" fill="#444"/>
 <path d="M345,420 L345,440" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <rect x="339" y="440" width="12" height="36" fill="#fff" stroke="#444" stroke-width="1.8"/>
@@ -214,19 +206,13 @@
 <path d="M658,458 L658,500" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <text x="676" y="436" font-size="11.5" fill="#222" text-anchor="start" font-weight="bold" >R2 100 Ω</text>
 <circle cx="648" cy="540" r="27" fill="#fff" stroke="#bbb" stroke-width="1.2"/>
-<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<line x1="640" y1="526" x2="640" y2="554" stroke-width="3.6"/>
-<line x1="610" y1="540" x2="640" y2="540"/>
-<polyline points="640,533 658,518 658,500"/>
-<polyline points="640,547 658,562 658,580"/>
-</g>
-<polygon points="656.2,560.5 647.7,558.1 652.4,552.6" fill="#444"/>
-<text x="678" y="538" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q1 NPN</text>
-<text x="678" y="552" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >2N3904 / MMBT3904</text>
+<g stroke="#444" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="636" y1="528" x2="636" y2="552"/><line x1="610" y1="540" x2="636" y2="540"/><line x1="642" y1="526" x2="642" y2="534" stroke-width="3.2"/><line x1="642" y1="536" x2="642" y2="544" stroke-width="3.2"/><line x1="642" y1="546" x2="642" y2="554" stroke-width="3.2"/><polyline points="642,530 658,530 658,500"/><polyline points="642,550 658,550 658,580"/><polyline points="648,540 658,540 658,550"/></g><polygon points="643,540 650,536 650,544" fill="#444"/>
+<text x="678" y="538" font-size="12" fill="#222" text-anchor="start" font-weight="bold" >Q1 N-MOSFET</text>
+<text x="678" y="552" font-size="10.5" fill="#555" text-anchor="start" font-weight="normal" >AO3400A, SOT-23</text>
 <path d="M658,580 L658,590" fill="none" stroke="#444" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
 <g stroke="#444" stroke-width="2.2" stroke-linecap="round"><line x1="658" y1="590" x2="658" y2="596"/><line x1="648" y1="596" x2="668" y2="596"/><line x1="652" y1="601" x2="664" y2="601"/><line x1="655.5" y1="606" x2="660.5" y2="606"/></g>
 <rect x="402" y="534" width="36" height="12" fill="#fff" stroke="#444" stroke-width="1.8"/>
-<text x="420" y="564" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R1 4.7 kΩ</text>
+<text x="420" y="564" font-size="10.5" fill="#555" text-anchor="middle" font-weight="normal" >R1 1 kΩ</text>
 <path d="M658,372 L820,372 L820,245 L853,245 A7,7 0 0 1 867,245 L893,245 A7,7 0 0 1 907,245 L933,245 A7,7 0 0 1 947,245 L1032,245" fill="none" stroke="#00665f" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
 <path d="M658,372 L820,372 L820,245 L853,245 A7,7 0 0 1 867,245 L893,245 A7,7 0 0 1 907,245 L933,245 A7,7 0 0 1 947,245 L1032,245" fill="none" stroke="#00a99d" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="1032" cy="245" r="4" fill="#00a99d" stroke="#00665f" stroke-width="1.2"/>
@@ -240,13 +226,13 @@
 <line x1="340" y1="702" x2="368" y2="702" stroke="#165a91" stroke-width="7" stroke-linecap="round"/><line x1="340" y1="702" x2="368" y2="702" stroke="#2e9bf0" stroke-width="4.6" stroke-linecap="round"/>
 <text x="380" y="706.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO2 → ICSP 5 (PGC)</text>
 <line x1="340" y1="728" x2="368" y2="728" stroke="#1b6b31" stroke-width="7" stroke-linecap="round"/><line x1="340" y1="728" x2="368" y2="728" stroke="#2fa84f" stroke-width="4.6" stroke-linecap="round"/>
-<text x="380" y="732.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO3 MCLR_LOW → R1 → Q1 base</text>
+<text x="380" y="732.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO3 MCLR_LOW → R1 → Q1 gate</text>
 <line x1="670" y1="650" x2="698" y2="650" stroke="#5e2d73" stroke-width="7" stroke-linecap="round"/><line x1="670" y1="650" x2="698" y2="650" stroke="#9b59b6" stroke-width="4.6" stroke-linecap="round"/>
-<text x="710" y="654.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO10 VPP_ON → R3 → Q2 base</text>
+<text x="710" y="654.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GPIO10 VPP_ON → R3 → Q2 gate</text>
 <line x1="670" y1="676" x2="698" y2="676" stroke="#00665f" stroke-width="7" stroke-linecap="round"/><line x1="670" y1="676" x2="698" y2="676" stroke="#00a99d" stroke-width="4.6" stroke-linecap="round"/>
-<text x="710" y="680.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >MCLR net: Q3 collector, R2 → ICSP 1</text>
+<text x="710" y="680.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >MCLR net: Q3 drain, R2 → ICSP 1</text>
 <line x1="670" y1="702" x2="698" y2="702" stroke="#a04f00" stroke-width="7" stroke-linecap="round"/><line x1="670" y1="702" x2="698" y2="702" stroke="#f57c00" stroke-width="4.6" stroke-linecap="round"/>
-<text x="710" y="706.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >9 V rail → Q3 emitter</text>
+<text x="710" y="706.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >9 V rail → Q3 source</text>
 <line x1="670" y1="728" x2="698" y2="728" stroke="#000" stroke-width="7" stroke-linecap="round"/><line x1="670" y1="728" x2="698" y2="728" stroke="#2b2b2b" stroke-width="4.6" stroke-linecap="round"/>
 <text x="710" y="732.5" font-size="12.5" fill="#333" text-anchor="start" font-weight="normal" >GND symbols: one common net</text>
 <rect x="848" y="478" width="332" height="132" rx="6" fill="#fff" stroke="#c9c9c2"/>

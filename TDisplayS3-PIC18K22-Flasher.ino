@@ -22,7 +22,7 @@ WiFiManager wifiManager;
 WebServer server(80);
 
 // Scripts, HEX files and saved settings live in FFat; survive reboots.
-static const char *DEFAULT_SCRIPT = "/flash.txt";   // run on insertion / KEY
+#define DEFAULT_SCRIPT "flash.txt"   // run on insertion / KEY
 static const char *UPLOAD_TMP = "/upload.tmp";
 static File uploadFile;
 static char uploadName[32];     // validated filename of the upload in progress
@@ -34,19 +34,27 @@ static const char DEFAULT_FLASH_TXT[] =
   "read   eeprom  settings-{id}.hex\n"
   "erase  chip\n"
   "write  firmware.hex\n"
-  "write  userid-{id}.hex              # after firmware, so this board's ID wins\n"
+  "verify firmware.hex                 # before the settings overwrite any EEPROM data it carries\n"
   "write  settings-{id}.hex\n"
-  "verify firmware.hex\n"
-  "verify userid-{id}.hex\n"
   "verify settings-{id}.hex\n"
+  "write  userid-{id}.hex              # last: an interrupted run leaves the ID blank, so the rerun stops\n"
+  "verify userid-{id}.hex\n"
   "reset\n";
 
 static uint32_t passCount = 0, failCount = 0;
 
 // Auto mode flashes once per insertion: set after every attempt (PASS, FAIL,
-// skipped, or comm error), cleared when the target disconnects. A comm-error
-// board is NOT retried while it stays seated: every retry rewrites flash.
+// skipped, or comm error), cleared after MISSES_GONE "no target" probes in a row,
+// or when a different user ID than flashedId shows on two probes in a row (a board
+// swapped faster than the miss rule sees). flashedId is the ID the run started on
+// (no post-run probe: one bad read there would reflash a seated board). A run that
+// changes the ID (blank after an interruption) gets one more run, which stops at
+// "blank userid" without touching the chip.
+// A comm-error board is NOT retried while it stays seated: every retry rewrites flash.
 static bool flashed = false;
+#define MISSES_GONE 3   // ~3 s: one bad probe (bounced pogo pin) must not reflash a seated board
+static char flashedId[17] = "";   // user ID the last run started on
+static char newId[17] = "";       // a boardId seen once; a second sighting makes a new board
 
 // Last verdict, shown on the home screen until the board is removed.
 static char lastResult[16] = "";
@@ -254,7 +262,7 @@ static void handleFileGet() {
   if (!nameArg(path, sizeof(path))) return;
   File f = FFat.open(path);
   if (!f || f.isDirectory()) { server.send(404, "text/plain", "No such file\n"); return; }
-  server.sendHeader("Content-Disposition", "attachment; filename=\"" + server.arg("name") + "\"");
+  server.sendHeader("Content-Disposition", String("attachment; filename=\"") + (path + 1) + "\"");   // validated name
   server.streamFile(f, "application/octet-stream");
   f.close();
 }
@@ -302,12 +310,13 @@ static void handleUploadDone() {
   char path[40];
   snprintf(path, sizeof(path), "/%s", uploadName);
   FFat.remove(path);
-  if (!FFat.rename(UPLOAD_TMP, path)) {
+  bool ok = FFat.rename(UPLOAD_TMP, path);
+  uploadCode = 400; uploadWhy = "No file in the request\n";   // a request with no file part must not reuse this one
+  if (!ok) {
     FFat.remove(UPLOAD_TMP);
     server.send(500, "text/plain", "Rename failed\n");
     return;
   }
-  uploadCode = 400; uploadWhy = "No file in the request\n";   // a request with no file part must not reuse this one
   server.send(200, "text/plain", String("ok: ") + uploadName + "\n");
   Serial.printf("uploaded %s\n", uploadName);
 }
@@ -318,9 +327,11 @@ static bool probe();   // below
 static void handleRun() {
   char path[40];
   if (!nameArg(path, sizeof(path))) return;
+  size_t len = strlen(path);
+  if (len < 5 || strcmp(path + len - 4, ".txt")) { server.send(400, "text/plain", "Only .txt scripts run\n"); return; }
   if (!FFat.exists(path)) { server.send(404, "text/plain", "No such file\n"); return; }
   if (!probe()) { server.send(409, "text/plain", "No board on the jig\n"); return; }   // safe: no script is running
-  strlcpy(runName, server.arg("name").c_str(), sizeof(runName));
+  strlcpy(runName, path + 1, sizeof(runName));
   wantRun = true;
   server.send(200, "text/plain", "ok: running\n");
 }
@@ -405,10 +416,17 @@ static bool runScript(const char *name) {
 }
 
 // One verdicted run: up to 3 runScript attempts (each re-enters ICSP) on comm
-// errors. If no attempt reaches a verdict, show an orange notice — NOT a red
-// FAIL (that's reserved for verify mismatch) — instead of silently going home.
+// errors. Each retry re-probes first: a board that has gone gets an orange
+// "no target" instead of more runs against nothing. If no attempt reaches a
+// verdict, show an orange notice — NOT a red FAIL (that's reserved for verify
+// mismatch) — instead of silently going home.
 static void flashWithRetry(const char *name) {
   for (int attempt = 1; attempt <= 3; attempt++) {
+    if (attempt > 1 && !probe()) {
+      Serial.println("flash: target gone, not retrying");
+      showResult("no target", TFT_ORANGE, "removed");
+      return;
+    }
     if (runScript(name)) return;
     Serial.printf("flash: comm error, attempt %d/3\n", attempt);
   }
@@ -417,31 +435,32 @@ static void flashWithRetry(const char *name) {
 
 // Run, honor retest presses during the result hold, then home.
 static void runTests(const char *name) {
+  char startId[sizeof(flashedId)];
+  strlcpy(startId, boardId, sizeof(startId));   // from the probe that started this run
   flashWithRetry(name);
   while (wantRetest) {
     wantRetest = false;
     flashWithRetry(name);
   }
   flashed = true;   // whatever the outcome: no retry until the board is reseated
+  strlcpy(flashedId, startId, sizeof(flashedId));
+  newId[0] = 0;
   showHome();
 }
 
 // Refresh `detected` and `boardId`; true if a target answered. Only call between
 // script runs: pic_probe() ends any open ICSP session.
 static bool probe() {
-  strlcpy(detected, pic_probe(), sizeof(detected));
+  uint8_t u[8];
+  strlcpy(detected, pic_probe(u), sizeof(detected));   // one HV session: device ID + user ID
   boardId[0] = 0;
   if (pic_part_detected()) {
-    uint8_t u[8];
     bool blank = true;
-    if (pic_dev.read(IHX_USERID, 0, u, sizeof(u))) {
-      for (int i = 0; i < 8; i++) {
-        snprintf(boardId + 2 * i, 3, "%02X", u[i]);
-        if (u[i] != 0xFF) blank = false;
-      }
-      if (blank) strcpy(boardId, "blank");
+    for (int i = 0; i < 8; i++) {
+      snprintf(boardId + 2 * i, 3, "%02X", u[i]);
+      if (u[i] != 0xFF) blank = false;
     }
-    pic_dev.reset();   // ends the read session
+    if (blank) strcpy(boardId, "blank");
   }
   return strcmp(detected, "no target") != 0;
 }
@@ -460,11 +479,11 @@ static void maybeStartNetwork() {
 }
 
 void setup() {
+  icsp_init();   // first: VPP_ON off and the target held in reset before anything else runs
   Serial.begin(115200);
 
   pinMode(MODE_BUTTON, INPUT_PULLUP);
   pinMode(FLASH_BUTTON, INPUT_PULLUP);
-  icsp_init();
 
   pinMode(15, OUTPUT);        // T-Display S3: LCD power enable, required on battery
   digitalWrite(15, HIGH);
@@ -485,12 +504,12 @@ void setup() {
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateChunk);
 
   FFat.begin(true);                        // format on first boot
-  if (!FFat.exists(DEFAULT_SCRIPT)) {
-    File f = FFat.open(DEFAULT_SCRIPT, FILE_WRITE);
+  if (!FFat.exists("/" DEFAULT_SCRIPT)) {
+    File f = FFat.open("/" DEFAULT_SCRIPT, FILE_WRITE);
     if (f) {
       f.write((const uint8_t *)DEFAULT_FLASH_TXT, sizeof(DEFAULT_FLASH_TXT) - 1);
       f.close();
-      Serial.println("wrote default /flash.txt");
+      Serial.println("wrote default /" DEFAULT_SCRIPT);
     }
   }
 
@@ -559,7 +578,7 @@ void loop() {
       tft.print("no target, check wiring");
       return;
     }
-    runTests("flash.txt");
+    runTests(DEFAULT_SCRIPT);
     return;
   }
 
@@ -571,12 +590,28 @@ void loop() {
 
   char prev[sizeof(detected) + sizeof(boardId)];
   snprintf(prev, sizeof(prev), "%s|%s", detected, boardId);
+  static int misses = 0;   // consecutive "no target" probes
   if (!probe()) {
-    flashed = false;     // next insertion gets flashed
-    lastResult[0] = 0;   // verdict was for the board just removed
-  } else if (autoMode && !flashed) {
-    runTests("flash.txt");
-    return;
+    newId[0] = 0;          // sightings must be consecutive
+    if (misses < MISSES_GONE && ++misses == MISSES_GONE) {
+      flashed = false;     // next insertion gets flashed
+      lastResult[0] = 0;   // verdict was for the board just removed
+      showHome();
+    }
+  } else {
+    misses = 0;
+    // Same-ID boards still need the 3-miss rule; two in a row so one misread ID can't reflash.
+    if (autoMode && flashed && strcmp(boardId, flashedId)) {
+      if (!strcmp(boardId, newId)) {
+        Serial.printf("new board %s (was %s)\n", boardId, flashedId);
+        flashed = false;
+        lastResult[0] = 0;
+      } else strlcpy(newId, boardId, sizeof(newId));
+    } else newId[0] = 0;
+    if (autoMode && !flashed) {
+      runTests(DEFAULT_SCRIPT);
+      return;
+    }
   }
   char now[sizeof(prev)];
   snprintf(now, sizeof(now), "%s|%s", detected, boardId);

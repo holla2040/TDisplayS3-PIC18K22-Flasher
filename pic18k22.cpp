@@ -3,6 +3,7 @@
 #include "icsp.h"
 #endif
 #include <stdio.h>
+#include <string.h>
 #include "pic18k22.h"
 
 // Device IDs: DS41398 Table 5-2 (& 0xFFE0; low 5 bits are the revision).
@@ -163,22 +164,33 @@ static bool write_eeprom(uint32_t off, const uint8_t *buf, const uint8_t *mask, 
   return true;
 }
 
+// Table 3-2 sequence with a Table 3-1 option (DS41398B p.13) in 3C0005h:3C0004h:
+// 0F8Fh chip, 0084h data EEPROM, 0088h user ID. Each byte goes in both payload halves.
+static void bulk_erase(uint8_t hi, uint8_t lo) {
+  set_ptr(0x3C0005); icsp_tblwr(0xC, hi | hi << 8);
+  set_ptr(0x3C0004); icsp_tblwr(0xC, lo | lo << 8);
+  icsp_core(NOP_);
+  icsp_nop_hold(P11_US + P10_US);
+}
+
 static bool dev_write(int r, uint32_t off, const uint8_t *buf, const uint8_t *mask, size_t n) {
   if (!in_range(r, off, n)) return false;
   session();
   if (r == IHX_CONFIG) write_config(off, buf, mask, n);
   else if (r == IHX_EEPROM) return write_eeprom(off, buf, mask, n);
-  else write_rows(r, off, buf, mask, n);
+  else {
+    // Programming only clears bits: without this a second user-ID write (firmware.hex
+    // then userid-{id}.hex) would leave the AND of both IDs. Now the last write wins.
+    if (r == IHX_USERID) bulk_erase(0x00, 0x88);
+    write_rows(r, off, buf, mask, n);
+  }
   return true;
 }
 
-// Table 3-2 / 3-1: 3C0005h:3C0004h = 0F8Fh chip, 0084h data EEPROM only.
 static bool dev_erase(bool chip) {
   session();
-  set_ptr(0x3C0005); icsp_tblwr(0xC, chip ? 0x0F0F : 0x0000);
-  set_ptr(0x3C0004); icsp_tblwr(0xC, chip ? 0x8F8F : 0x8484);
-  icsp_core(NOP_);
-  icsp_nop_hold(P11_US + P10_US);
+  if (chip) bulk_erase(0x0F, 0x8F);
+  else bulk_erase(0x00, 0x84);
   return true;
 }
 
@@ -188,6 +200,14 @@ static bool dev_ee_locked() {
   return !(c5h & 0x80);                          // CONFIG5H CPD = 0
 }
 
+// Figure 5-1: device ID low byte at 0x3FFFFE, high at 0x3FFFFF.
+static uint16_t dev_devid() {
+  session();
+  set_ptr(0x3FFFFE);
+  uint16_t id = icsp_tblrd_postinc();
+  return id | icsp_tblrd_postinc() << 8;
+}
+
 static void dev_reset() {
   if (active) icsp_exit();
   active = false;
@@ -195,22 +215,22 @@ static void dev_reset() {
   icsp_release();
 }
 
-pic_ops pic_dev = {{0, 0, 0, 0}, cfg_mask, dev_read, dev_write, dev_erase, dev_ee_locked, dev_reset};
+pic_ops pic_dev = {{0, 0, 0, 0}, 0, cfg_mask, dev_read, dev_write, dev_erase, dev_ee_locked, dev_devid, dev_reset};
 
-const char *pic_probe() {
+const char *pic_probe(uint8_t uid[8]) {
   static char unknown[16];
-  session();
-  set_ptr(0x3FFFFE);                             // Figure 5-1
-  uint16_t id = icsp_tblrd_postinc();
-  id |= icsp_tblrd_postinc() << 8;
-  dev_reset();
+  uint16_t id = dev_devid();
   detected = pic_lookup(id);
   uint8_t blocks = detected && detected->flash >= 32768 ? 0x0F : 0x03;
   cfg_mask[8] = cfg_mask[10] = cfg_mask[12] = blocks;
+  pic_dev.part_id = detected ? detected->id : 0;
   pic_dev.size[IHX_FLASH] = detected ? detected->flash : 0;
   pic_dev.size[IHX_USERID] = detected ? 8 : 0;
   pic_dev.size[IHX_CONFIG] = detected ? 14 : 0;
   pic_dev.size[IHX_EEPROM] = detected ? detected->eeprom : 0;
+  memset(uid, 0xFF, 8);
+  if (detected) dev_read(IHX_USERID, 0, uid, 8);
+  dev_reset();
   if (id == 0x0000 || id == 0xFFFF) return "no target";
   if (!detected) {
     snprintf(unknown, sizeof unknown, "unknown 0x%04X", id);

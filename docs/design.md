@@ -39,7 +39,7 @@ Device table (device ID & 0xFFE0, from the pack; F / LF):
 | 25K22 / 45K22 | 0x5540 / 0x5560, 0x5500 / 0x5520 | 32 KB | 256 B |
 | 26K22 / 46K22 | 0x5440 / 0x5460, 0x5400 / 0x5420 | 64 KB | 1 KB |
 
-- VPP 7.5–9.0 V (default 9.0). VDD 1.8–5.5 V (LF parts: 1.8–3.6 V).
+- VPP 7.8–9.0 V at VDD 3.3 V (DS41398B D110: VDD + 4.5 V min, 9.0 V max; default 9.0). VDD 1.8–5.5 V (LF parts: 1.8–3.6 V).
 - Write row 64 bytes. Waits: bulk erase 15 ms, row program 1 ms, config 5 ms,
   EEPROM byte 4 ms, user ID 5 ms.
 - Low-voltage programming needs both `LVP=ON` and `MCLRE=EXTMCLR`; field
@@ -53,12 +53,17 @@ Device table (device ID & 0xFFE0, from the pack; F / LF):
 |---|---|---|
 | GPIO 1 | PGD | bidirectional |
 | GPIO 2 | PGC | jig drives |
-| GPIO 3 | MCLR low | NPN pulls MCLR to GND through 100 Ω (PICkit 2 Q8). Default on: target held in reset. |
-| GPIO 10 | MCLR high | NPN drives a PNP high-side switch putting 9 V on MCLR (PICkit 2 Q7/Q6) |
+| GPIO 3 | MCLR low | N-MOSFET (AO3400A) pulls MCLR to GND through 100 Ω (PICkit 2 Q8 position). Default on: target held in reset. |
+| GPIO 10 | MCLR high | N-MOSFET (AO3400A) drives a P-MOSFET (AO3401A) high-side switch putting the VPP rail on MCLR (PICkit 2 Q7/Q6 position) |
 | 3V3 | VDD | the jig powers the target; no VDD sensing |
+| 5V | boost input | USB 5 V feeds the on-board VPP boost |
 | GND | GND | |
 
-- The 9 V rail is available on the jig.
+- Power is USB only. An on-board boost circuit (the user's existing design from
+  another project; MT3608-class, LCSC C84817) makes the VPP rail from the
+  T-Display's 5V pin, set to 8.5 V: inside 7.8–9.0 V with margin both ways.
+  No external 9 V supply; never an unregulated converter (MCLR is almost no
+  load, so its output would rise above 9.0 V).
 - Firmware never turns on the VPP switch and the MCLR pull-down together
   (break-before-make, a few µs dead time).
 - 3.3 V targets only (ESP32 pins aren't 5 V tolerant). 5 V targets are out of scope.
@@ -77,11 +82,11 @@ read   userid  userid-{id}.hex      # chip erase wipes the user ID, so save it f
 read   eeprom  settings-{id}.hex
 erase  chip
 write  firmware.hex
-write  userid-{id}.hex              # after firmware, so this board's ID wins
+verify firmware.hex                 # before the settings overwrite any EEPROM data it carries
 write  settings-{id}.hex
-verify firmware.hex
-verify userid-{id}.hex
 verify settings-{id}.hex
+write  userid-{id}.hex              # last: an interrupted run leaves the ID blank, so the rerun stops
+verify userid-{id}.hex
 reset
 ```
 
@@ -108,6 +113,21 @@ reset
   silently skips a step).
 - A HEX record outside every region of the detected part is an error, checked
   when the file is loaded, before anything is written.
+- The user ID is written last in the default script: a run cut short anywhere
+  after `erase chip` leaves it blank, so the rerun stops at `blank userid`
+  instead of reading the half-programmed EEPROM over the saved settings file.
+- A `write` to the user ID first erases the user-ID block (DS41398B Table 3-1,
+  0088h), so the last user-ID write wins. On a code-protected chip that erase
+  also erases all program memory (DS41398B §3.1.1).
+- A `write` whose file carries user-ID bytes (0x200000–0x200007) followed by a
+  later `write` of another file with user-ID bytes stops the script before
+  touching the chip: orange `firmware has userid` at the earlier line. A
+  `firmware.hex` with IDLOC records would refill the user ID before the
+  settings are written, so an interrupted run's rerun would save the
+  half-written EEPROM as `settings-<id>.hex`. Build `firmware.hex` without them.
+- The device ID is checked when the script starts and again on a `verify`
+  mismatch. ICSP has no acknowledge and a missing target reads zeros, so a
+  missing or different part is a comm error, never a FAIL.
 - Config verify compares under the implemented-bits mask from the device table
   (unimplemented config bits read back as 0).
 - `read eeprom` with EEPROM read protection set (`CPD` = 0 in CONFIG5H) stops
@@ -122,19 +142,23 @@ reset
 - Comm errors (no target, entry failure, bad device ID mid-script) retry the
   whole script up to 3 times, then show an orange `comm error`.
 - Script errors (syntax, missing file, blank userid, EE locked, out-of-range
-  record) show an orange notice with the line number, no retry.
+  record, firmware has userid) show an orange notice with the line number, no retry.
 - Green **PASS** = every line ran.
 - Pass/fail counters, a 1 s result hold, KEY during the hold reruns, and the
   last result word stays on the home screen until the board is removed.
 - Auto mode runs `/flash.txt` once per insertion (`flashed` set after any
-  outcome, cleared on disconnect). A board left on the jig is never reflashed.
+  outcome, cleared after 3 "no target" probes in a row, about 3 s, or when a
+  different user ID than the last run's shows on two probes in a row). After a
+  run the last run's ID is unknown (the run may change it): it is taken from
+  the first ID seen on two probes in a row, and that is not a new insertion. A
+  board left on the jig is never reflashed.
 
 ## Detection
 
 Once a second (both modes): enter HV programming, read the device ID, exit.
 Device ID 0x0000 or 0xFFFF = no target. Otherwise home line 1 shows the part
-name from the device table (e.g. `PIC18F46K22`) or `unknown 0x5400` for an ID
-not in the table (and no script runs on it).
+name from the device table (e.g. `PIC18F46K22`) or `unknown 0x5200` for an ID
+not in the table, shown raw with its revision bits (and no script runs on it).
 
 Detection is intrusive: the target is held in reset for the duration of each
 probe (a few ms), once a second, the same tradeoff as the STM8 jig.
@@ -175,8 +199,10 @@ probe (a few ms), once a second, the same tradeoff as the STM8 jig.
   - HEX round trip (parse → write → parse) across all four regions, bad
     checksum and out-of-range records rejected.
   - Script runner against a fake chip: command order, `{id}` expansion, blank
-    userid stops before any erase, EE locked stops before erase, missing file
-    is an error, only a verify mismatch gives FAIL.
+    userid stops before any erase, EE locked stops before erase, missing or
+    out-of-range file is an error before erase, firmware with user-ID records
+    before a later user-ID write is an error before erase, only a verify mismatch with the
+    target still there gives FAIL, an interrupted run's rerun keeps the saved settings.
 - `make bin` compiles cleanly (arduino-cli, esp32 core 3.3.0).
 - On hardware (the user, on a real K22 board):
   1. Probe shows the right part name and `{id}`.

@@ -19,7 +19,7 @@ static inline void drive(bool on) {
   else GPIO.enable_w1tc = PGD;
 }
 
-// Host sets PGD while PGC is high; target latches it on the falling edge.
+// Host sets PGD while PGC is low, then clocks; target latches it on the falling edge.
 static void write_bits(uint32_t v, int n) {
   for (int i = 0; i < n; i++, v >>= 1) {
     if (v & 1) GPIO.out_w1ts = PGD;
@@ -46,12 +46,17 @@ static uint8_t read_byte() {
 }
 
 void icsp_init() {
-  // Levels first, then directions, so neither switch glitches on at boot.
+  // Levels before directions, so neither switch glitches on at boot. VPP_ON is
+  // driven off first and MCLR_LOW only 5 µs later: break-before-make even if
+  // GPIO10 floated high during boot.
   GPIO.out_w1tc = VPP_ON | PGC | PGD;
   GPIO.out_w1ts = MCLR_LOW;
   gpio_config_t c = {};
-  c.pin_bit_mask = 1ULL << VPP_ON_PIN | 1ULL << MCLR_LOW_PIN;
+  c.pin_bit_mask = 1ULL << VPP_ON_PIN;
   c.mode = GPIO_MODE_OUTPUT;
+  gpio_config(&c);
+  delayMicroseconds(5);
+  c.pin_bit_mask = 1ULL << MCLR_LOW_PIN;
   gpio_config(&c);
   c.pin_bit_mask = 1ULL << PGD_PIN | 1ULL << PGC_PIN;
   c.mode = GPIO_MODE_INPUT_OUTPUT;               // read back while released
@@ -65,6 +70,7 @@ void icsp_init() {
 // PNP switch rise.
 void icsp_enter() {
   GPIO.out_w1tc = VPP_ON;
+  delayMicroseconds(5);                          // break-before-make
   GPIO.out_w1ts = MCLR_LOW;                      // target may be running: reset it first
   GPIO.out_w1tc = PGC | PGD;
   GPIO.enable_w1ts = PGC | PGD;

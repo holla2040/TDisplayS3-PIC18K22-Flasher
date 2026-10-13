@@ -38,7 +38,7 @@ from the chip so it can be tested on the host against a fake chip.
 │  programming and bulk-erase holds                             │
 ├───────────────────────────────────────────────────────────────┤
 │ GPIO1 PGD · GPIO2 PGC · GPIO3 MCLR_LOW · GPIO10 VPP_ON        │
-│ (MCLR drive: NPN pull-down, NPN + PNP high-side 9 V switch)   │
+│ (MCLR drive: N-FET pull-down, N-FET + P-FET high-side 9 V)    │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -57,25 +57,30 @@ phase, never corrupt a bit.
 |---|---|
 | GPIO1 `PGD_PIN` | PGD, bidirectional (input/output with an internal pull-down) |
 | GPIO2 `PGC_PIN` | PGC, driven by the jig (internal pull-down) |
-| GPIO3 `MCLR_LOW_PIN` | NPN: MCLR to GND through 100 Ω. High = target held in reset. |
-| GPIO10 `VPP_ON_PIN` | NPN driving a PNP high-side switch: 9 V onto MCLR. High = HV on. |
+| GPIO3 `MCLR_LOW_PIN` | N-MOSFET: MCLR to GND through 100 Ω. High = target held in reset. |
+| GPIO10 `VPP_ON_PIN` | N-MOSFET driving a P-MOSFET high-side switch: 9 V onto MCLR. High = HV on. |
 
-`icsp_init()` sets the levels before the directions (VPP off, MCLR_LOW on, PGC/PGD
-low), so neither switch glitches on at boot. GPIO10 still floats before that
-runs, which is why the hardware has a 10 kΩ pull-down on it.
+`icsp_init()` (the first thing `setup()` does) sets the levels before the
+directions, so neither switch glitches on at boot: VPP_ON is made a low output
+first, then 5 µs later MCLR_LOW a high one (break-before-make even if GPIO10
+floated high), then PGC/PGD low. GPIO10 still floats before that runs, which is
+why the hardware has a 10 kΩ pull-down on it. GPIO3 is an ESP32-S3 strapping pin
+(JTAG source), sampled only if the `STRAP_JTAG_SEL` eFuse is burned (off by
+default); until `icsp_init()` Q1's gate floats, so MCLR is undefined for the
+first ~300 ms of a jig boot.
 
 ### HV entry and exit (DS41398 §2.5, Figures 2-12 and 2-13)
 
 The jig powers VDD from 3V3, so VDD is already up. `icsp_enter()`:
 
-1. VPP off, MCLR_LOW on (the target may be running: reset it first), PGC/PGD
-   low and driven.
+1. VPP off, wait 5 µs, MCLR_LOW on (the target may be running: reset it first),
+   PGC/PGD low and driven.
 2. Wait 100 µs.
 3. MCLR_LOW off.
 4. Wait 5 µs. **MCLR floats here**: neither switch drives it (break-before-make,
    so 9 V is never connected to the 100 Ω pull-down).
 5. VPP on. Wait 100 µs (the spec's P12 is 2 µs before the first command; the
-   rest covers the PNP switch's rise).
+   rest covers the P-MOSFET switch's rise).
 
 `icsp_exit()`: PGC/PGD low, VPP off, wait 5 µs (floating again), MCLR_LOW on,
 PGC/PGD released to inputs (P16 = 0: no PGC edge between the last frame and MCLR falling).
@@ -136,13 +141,14 @@ revision) and finds one of 16 entries: name, flash size, EEPROM size. IDs are
 from DS41398 Table 5-2, sizes from the MPLAB X PIC18F-K_DFP 1.14.301 device
 files.
 
-`pic_probe()` enters programming mode, reads the device ID at 0x3FFFFE/F
-(`TBLPTR` = 0x3FFFFE, two `TBLRD*+`), leaves, and releases MCLR. It returns
-`no target` for 0x0000 or 0xFFFF (PGC/PGD have internal pull-downs, so an empty
-jig reads zeros), the part name, or `unknown 0x5403` (the raw ID, revision bits
-included). It latches the detected part into `pic_dev`: region sizes (flash,
-user ID 8, config 14, EEPROM) and the config mask. The ino then reads the user
-ID in a second session for the home screen.
+`pic_probe(uid)` enters programming mode, reads the device ID at 0x3FFFFE/F
+(`devid()`: `TBLPTR` = 0x3FFFFE, two `TBLRD*+`) and, for a known part, the 8
+user-ID bytes into `uid`, then leaves and releases MCLR: one HV session, so one
+target reset per probe. It returns `no target` for 0x0000 or 0xFFFF (PGC/PGD
+have internal pull-downs, so an empty jig reads zeros), the part name, or
+`unknown 0x5200` (the raw ID, revision bits included). It latches the detected
+part into `pic_dev`: region sizes (flash, user ID 8, config 14, EEPROM),
+`part_id` (the table ID) and the config mask.
 
 ### Session
 
@@ -176,7 +182,13 @@ byte the HEX file supplies: set `TBLPTR` to the row, send the row's words with
 `1101` (post-increment), and the last word with `1111` and the P9 (flash) or
 P9A (user ID) hold. Bytes of a row the file doesn't cover are padded with
 0xFF, which leaves erased cells alone. Rows nothing touches are skipped.
-`BCF WREN` at the end. There is no erase here: the cells have to be blank.
+`BCF WREN` at the end. Flash rows aren't erased here: the cells have to be blank.
+A user-ID write first bulk-erases the user-ID block (0088h, below), because
+programming only clears bits: without it, two user-ID writes (a one-off script
+writing an ID over one already there) would leave the AND of the two IDs. With
+it the last user-ID write wins. On a code-protected chip the 0088h erase also
+erases all program memory (DS41398B §3.1.1). The runner refuses a script with
+two user-ID writes anyway (preflight, below).
 
 **Write config** (Table 3-9): `BSF EEPGD`, `BSF CFGS`, `BSF WREN`, then one byte at
 a time in the order 0..10, 12, 13, **11 last**: set `TBLPTR` to that byte, send
@@ -194,13 +206,18 @@ the 4th PGC of the second), wait P11A (4 ms), then poll the WR bit (read
 `EECON1` through TABLAT) up to 10 more times at 1 ms, wait P10, `BCF WREN`. If WR
 is still set the write returns an error (a comm error to the script runner).
 
-**Bulk erase** (Tables 3-1 and 3-2): `TBLPTR` = 0x3C0005, table write `1100` of
-0F0F (chip) or 0000 (EEPROM only); `TBLPTR` = 0x3C0004, `1100` of 8F8F or 8484;
-a NOP, then the P11 + P10 hold. The combined codes are 0F8Fh (chip: flash,
-user ID, config, EEPROM, code protection) and 0084h (data EEPROM only).
+**Bulk erase** (DS41398B Tables 3-1 and 3-2, page 13): `TBLPTR` = 0x3C0005, table
+write `1100` with the high byte of the option in both payload halves; `TBLPTR` =
+0x3C0004, `1100` with the low byte; a NOP, then the P11 + P10 hold. Options used:
+0F8Fh (chip: flash, user ID, config, EEPROM, code protection), 0084h (data
+EEPROM only) and 0088h (user ID only, before a user-ID write).
 
 **EEPROM locked**: `ee_locked()` reads CONFIG5H (0x300009) and returns true when
 bit 7 (`CPD`) is 0. A failed read returns false, which is all the signature allows.
+
+**Device ID**: `devid()` reads 0x3FFFFE/F inside the current session (opening
+one if needed). The script runner uses it to tell a missing or swapped board
+from a bad one.
 
 **Reset**: if a session is open, `icsp_exit()`; wait 100 µs; `icsp_release()`.
 
@@ -217,7 +234,7 @@ parse as one. `ihx_write` emits one region's masked bytes: a type-04 record per
 ## Script runner (`script.cpp`)
 
 The runner knows nothing about the chip beyond `pic_ops` (read, write, erase,
-`ee_locked`, reset, region sizes, config mask) and `fs_ops` (load, save), so
+`ee_locked`, `devid`, reset, region sizes, `part_id`, config mask) and `fs_ops` (load, save), so
 `make test` drives it with a fake chip and a fake filesystem.
 
 ### Phases of `script_run`
@@ -226,19 +243,34 @@ The runner knows nothing about the chip beyond `pic_ops` (read, write, erase,
    tokens and checked against the grammar (`read <region> <file>`, `erase chip|eeprom`,
    `write <file>`, `verify <file>`, `reset`). A bad line, or one over 127
    characters, stops everything: `SCRIPT_ERROR` `syntax` with its line number.
-   Nothing has touched the chip yet. The first line that contains `{id}` is
-   remembered.
-2. **`{id}`.** If any line uses it, the 8 user-ID bytes are read once and
+   Nothing has touched the chip yet. The first line that contains `{id}` and the
+   first `read eeprom` line are remembered.
+2. **Device ID.** `devid()` must answer with the part the sizes came from
+   (`& 0xFFE0 == part_id`, not 0x0000/0xFFFF), or the run is `SCRIPT_COMM`
+   `no target` at line 0 before anything is read or saved. ICSP has no
+   acknowledge, so this is the only way to tell "gone" from "wrong".
+3. **`{id}`.** If any line uses it, the 8 user-ID bytes are read once and
    formatted as 16 uppercase hex digits. A read failure is `SCRIPT_COMM`. All
    0xFF stops with `blank userid` (`SCRIPT_ERROR`) at the first `{id}` line. This
    happens before any command, so `erase chip` can't take the ID away.
-3. **Preflight.** Every `write` and `verify` file (after `{id}` expansion) must exist
-   on the filesystem, or be saved by an earlier `read` in the same script;
-   otherwise `no <file>`. This catches a missing `firmware.hex` before `erase chip`.
-   It only checks existence, not content.
-4. **One allocation** (data + mask for each region of the detected part, plus a
-   read-back buffer as big as the biggest region), then the commands run in order
-   with a progress callback before each (line number and text, used by the flash page).
+4. **EEPROM lock.** If the script has a `read eeprom`, `ee_locked()` is checked
+   once here: `EE locked` at that line, before any line runs, whatever the line
+   order (the per-line check in `read` stays as a backstop).
+5. **One allocation** (data + mask for each region of the detected part, plus a
+   read-back buffer as big as the biggest region).
+6. **Preflight.** Every file name must expand (a `read` name too long after
+   `{id}` is `syntax` here, not after the erase). Every `write` and `verify` file
+   must be saved by an earlier `read` in the same script, or exist on the
+   filesystem and parse against the detected part's regions: `no <file>`,
+   `0x... outside chip`, `bad checksum` and the other parser errors stop the
+   script before the first command. A `write` whose file carries user-ID bytes
+   (or was saved by a `read userid`) followed by another such `write` is
+   `firmware has userid` at the earlier line: a `firmware.hex` with IDLOC
+   records would refill the user ID before the settings write, so a run cut
+   short there would no longer leave it blank, and the rerun would save the
+   half-written EEPROM as `settings-<id>.hex`.
+7. The commands run in order with a progress callback before each (line number
+   and text, used by the flash page).
 
 ### Commands
 
@@ -253,9 +285,10 @@ The runner knows nothing about the chip beyond `pic_ops` (read, write, erase,
   error is `SCRIPT_COMM`.
 - `verify <file>`: load and parse, then per region read the whole region back
   and compare every masked byte. For the config region the difference is masked
-  with `config_mask` (unimplemented bits read as 0). A difference is
-  `SCRIPT_FAIL` with `verify 0x<address>` (the first mismatching byte). A read
-  error is `SCRIPT_COMM`.
+  with `config_mask` (unimplemented bits read as 0). On a difference the device
+  ID is re-read: if the target is gone or a different part, `SCRIPT_COMM`
+  `no target`; otherwise `SCRIPT_FAIL` with `verify 0x<address>` (the first
+  mismatching byte). A read error is `SCRIPT_COMM`.
 - `reset`: `reset()`.
 
 The runner stops at the first non-pass status. The status carries the result
@@ -268,38 +301,53 @@ The jig powers the target, so there is no VDD sensing: a successful probe
 (device ID read, not 0x0000/0xFFFF) is the target-present detection.
 
 ```
-        probe every 1 s (HV session: device ID; second session: user ID)
+        probe every 1 s (one HV session: device ID + user ID)
             │
  no target ◀┤ target present, auto mode, not yet run
- (clear     ▼
-  flag,     runScript("flash.txt"): script_run, then pic_dev.reset()
-  clear     │      comm error → up to 3 attempts of the whole script
-  result)   ▼
+ ×3 in a    ▼
+ row: clear runScript("flash.txt"): script_run, then pic_dev.reset()
+ flag and   │      comm error → re-probe; gone: orange "no target";
+ result)    │      else up to 3 attempts of the whole script
+            ▼
    PASS (green) │ FAIL (red, verify mismatch only) │ orange: comm error,
                 │                                   │ script error, unknown part
                 ▼
      result held 1 s on the flash page (KEY = rerun),
      then on the home screen until the board is removed
                 ▼
-     flag set: no rerun until the board is disconnected
+     flag set: no rerun until the board is disconnected (3 empty probes)
 ```
 
 - **FAIL means only a verify mismatch.** No target, comm errors and script errors
   never show as FAIL.
 - **Retry.** `runScript` returns false on `SCRIPT_COMM` (or when the probe saw a
-  part but none answers at run time) and `flashWithRetry` runs the whole script
-  again, up to 3 times, then shows orange `comm error no verdict`. Because the
-  script restarts, a comm error after `erase chip` makes the retry stop at
-  `blank userid`: the erase wiped the ID. The saved `userid-<id>.hex` is the recovery copy.
+  part but none answers at run time) and `flashWithRetry` re-probes, then runs the
+  whole script again, up to 3 times, then shows orange `comm error no verdict`.
+  If the re-probe finds no board it stops with an orange `no target removed`.
+  Because the default script writes the user ID last, any stop between
+  `erase chip` and `write userid-{id}.hex` leaves the ID blank, so the retry (or a
+  rerun after reseating) stops at `blank userid` before reading anything: the
+  half-programmed EEPROM never overwrites the saved `settings-<id>.hex`. The
+  saved `userid-<id>.hex` / `settings-<id>.hex` are the recovery copies (README:
+  a one-off script naming them explicitly).
 - **Script errors** show an orange notice (the message, cut to 18 characters, with
   `line N` on the detail line), aren't retried, and aren't counted as pass or fail.
 - **Unknown parts** (`unknown 0x....`) get an orange `unknown part skipped` and
   no script.
-- **Once per insertion**: the flag is set after any outcome and cleared when the
-  probe stops seeing a board. A board left on the jig is never rerun.
+- **Once per insertion**: the flag is set after any outcome and cleared (with the
+  last result) after 3 "no target" probes in a row, about 3 s, so one bad probe
+  can't rerun a board left on the jig. It is also cleared when a user ID other
+  than `flashedId` shows on two consecutive probes, so a quick swap to a
+  different board is run. `runTests` sets `flashedId` to the ID the run started
+  on, with no post-run probe, so one bad read after a run can't reflash a
+  seated board, and a board swapped during the result hold is still caught. A
+  run that changes the ID (blank after an interruption) gets one more run, which
+  stops at `blank userid` without touching the chip. Two same-ID boards swapped within ~3 s still look
+  like one board.
 - **After every run**, `pic_dev.reset()` closes any session left open by an error
   and releases MCLR so the target runs.
-- **HTTP-triggered runs.** `POST /run` checks the name and file, probes (safe: no
+- **HTTP-triggered runs.** `POST /run` checks the name (400 unless it ends in
+  `.txt`) and file, probes (safe: no
   script is running), and sets `wantRun`; `loop()` probes again and runs the
   script. It never runs in the handler.
 - **WiFi is secondary**: WiFiManager runs non-blocking and flashing never waits

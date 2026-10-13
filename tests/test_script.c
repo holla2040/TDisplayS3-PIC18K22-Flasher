@@ -12,31 +12,40 @@ static uint8_t chip[IHX_NREGIONS][FLASH_SZ];
 static uint8_t cfg_mask[CFG_SZ];
 static char logbuf[256];
 static int calls, fail_at;                  // fail_at: 1-based call number that returns false (0 = never)
-static bool locked, corrupt_flash_104;
+static int gone_at;                         // from this call on the target is pulled: reads 0, writes do nothing
+static bool locked, corrupt_flash_104, corrupt_ee_5;
+static uint16_t devid_val;                  // raw device ID the chip answers with
 static const uint32_t SIZES[IHX_NREGIONS] = {FLASH_SZ, UID_SZ, CFG_SZ, EE_SZ};
 
 static void logit(const char *s) { strcat(logbuf, s); strcat(logbuf, " "); }
+static bool gone() { return gone_at && calls >= gone_at; }
 static bool tick() { return ++calls != fail_at; }
 
 static bool f_read(int r, uint32_t off, uint8_t *buf, size_t n) {
   char t[8]; snprintf(t, sizeof t, "r%d", r); logit(t);
   if (!tick()) return false;
-  memcpy(buf, chip[r] + off, n);
+  if (gone()) memset(buf, 0, n);   // PGD pull-down: a missing target reads zeros, no error
+  else memcpy(buf, chip[r] + off, n);
   return true;
 }
+// A user-ID write replaces the whole 8-byte block (pic_dev erases it first), so the last one wins.
 static bool f_write(int r, uint32_t off, const uint8_t *buf, const uint8_t *mask, size_t n) {
   char t[8]; snprintf(t, sizeof t, "w%d", r); logit(t);
   if (!tick()) return false;
+  if (gone()) return true;
+  if (r == IHX_USERID) memset(chip[r], 0xFF, UID_SZ);
   for (size_t i = 0; i < n; i++) {
     if (!mask[i]) continue;
     chip[r][off + i] = r == IHX_CONFIG ? buf[i] & cfg_mask[i] : buf[i];   // unimplemented bits read 0
   }
   if (corrupt_flash_104 && r == IHX_FLASH) chip[IHX_FLASH][0x104] ^= 0x01;
+  if (corrupt_ee_5 && r == IHX_EEPROM) chip[IHX_EEPROM][5] ^= 0x01;
   return true;
 }
 static bool f_erase(bool c) {
   logit(c ? "Ec" : "Ee");
   if (!tick()) return false;
+  if (gone()) return true;
   memset(chip[IHX_EEPROM], 0xFF, EE_SZ);
   if (c) {
     memset(chip[IHX_FLASH], 0xFF, FLASH_SZ);
@@ -46,9 +55,12 @@ static bool f_erase(bool c) {
   return true;
 }
 static bool f_locked() { return locked; }
+static uint16_t f_devid() { logit("D"); ++calls; return gone() ? 0x0000 : devid_val; }
 static void f_reset() { logit("X"); }
 
-static const pic_ops DEV_TEMPLATE = {{FLASH_SZ, UID_SZ, CFG_SZ, EE_SZ}, cfg_mask, f_read, f_write, f_erase, f_locked, f_reset};
+enum { PART_ID = 0x5540 };   // PIC18F25K22: 32 KB flash, 256 B EEPROM
+static const pic_ops DEV_TEMPLATE = {{FLASH_SZ, UID_SZ, CFG_SZ, EE_SZ}, PART_ID, cfg_mask,
+                                     f_read, f_write, f_erase, f_locked, f_devid, f_reset};
 
 // ---- in-memory fs ----
 struct file { char name[40]; char *text; };
@@ -80,16 +92,16 @@ static void rec(char *o, int type, unsigned addr, const uint8_t *d, int n) {
 }
 
 static const uint8_t UID[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-static const char *const DEFAULT_SCRIPT =
+static const char *const DEFAULT_SCRIPT =   // same as the sketch's DEFAULT_FLASH_TXT
   "read   userid  userid-{id}.hex      # chip erase wipes the user ID, so save it first\n"
   "read   eeprom  settings-{id}.hex\n"
   "erase  chip\n"
   "write  firmware.hex\n"
-  "write  userid-{id}.hex              # after firmware, so this board's ID wins\n"
+  "verify firmware.hex                 # before the settings overwrite any EEPROM data it carries\n"
   "write  settings-{id}.hex\n"
-  "verify firmware.hex\n"
-  "verify userid-{id}.hex\n"
   "verify settings-{id}.hex\n"
+  "write  userid-{id}.hex              # last: an interrupted run leaves the ID blank, so the rerun stops\n"
+  "verify userid-{id}.hex\n"
   "reset\n";
 
 static void set_file(const char *name, const char *text) { fs_save(name, text, strlen(text)); }
@@ -101,8 +113,9 @@ static void reset_world() {
   for (int i = 0; i < EE_SZ; i++) chip[IHX_EEPROM][i] = (uint8_t)(i * 5 + 3);
   memset(cfg_mask, 0xFF, sizeof cfg_mask);
   logbuf[0] = 0;
-  calls = fail_at = 0;
-  locked = corrupt_flash_104 = false;
+  calls = fail_at = gone_at = 0;
+  locked = corrupt_flash_104 = corrupt_ee_5 = false;
+  devid_val = PART_ID | 0x03;   // revision bits don't matter
   // firmware.hex: flash 0x000..0x1FF, config bytes 0..1
   static char hex[4096];
   uint8_t fl[16], c[2] = {0x28, 0x1F}, p30[2] = {0x00, 0x30};
@@ -137,7 +150,8 @@ static void check_default_flow(const char *script) {
   expect(run(script), SCRIPT_PASS, 0, "");
   assert(find("settings-0102030405060708.hex"));
   assert(find("userid-0102030405060708.hex"));
-  assert(!strcmp(logbuf, "r1 r1 r3 Ec w0 w2 w1 w3 r0 r2 r1 r3 X "));   // id, read userid, read eeprom, erase, write..., verify..., reset
+  // devid, id, read userid, read eeprom, erase, write+verify firmware, settings, userid, reset
+  assert(!strcmp(logbuf, "D r1 r1 r3 Ec w0 w2 r0 r2 w3 r3 w1 r1 X "));
   assert(!memcmp(chip[IHX_EEPROM], ee, EE_SZ));
   assert(!memcmp(chip[IHX_USERID], UID, 8));
   assert(chip[IHX_FLASH][0x104] == (uint8_t)(0x104 * 7 + 1));
@@ -158,12 +172,12 @@ static void test_script_blank_id() {
   reset_world();
   memset(chip[IHX_USERID], 0xFF, UID_SZ);
   expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 1, "blank userid");
-  assert(!strcmp(logbuf, "r1 "));   // only the id read, no erase
+  assert(!strcmp(logbuf, "D r1 "));   // only the devid and id reads, no erase
 }
 
 static void test_script_blank_id_after_failed_run() {
   reset_world();
-  fail_at = 5;   // r1 id, r1 userid, r3 eeprom, Ec, w0 fails: erase already wiped the userid
+  fail_at = 6;   // D, r1 id, r1 userid, r3 eeprom, Ec, w0 fails: erase already wiped the userid
   expect(run(DEFAULT_SCRIPT), SCRIPT_COMM, 4, "");
   char saved[8192];
   strcpy(saved, find("settings-0102030405060708.hex")->text);
@@ -178,7 +192,10 @@ static void test_script_ee_locked() {
   reset_world();
   locked = true;
   expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 2, "EE locked");
-  assert(!strstr(logbuf, "E"));
+  assert(!strcmp(logbuf, "D r1 "));   // checked up front: not even "read userid" ran
+  assert(!find("userid-0102030405060708.hex"));
+  // no "read eeprom" in the script: the lock doesn't matter
+  expect(run("read userid u.hex\n"), SCRIPT_PASS, 0, "");
 }
 
 static void test_script_missing_file() {
@@ -186,7 +203,7 @@ static void test_script_missing_file() {
   free(find("firmware.hex")->text);
   find("firmware.hex")->text = nullptr;
   expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 4, "no firmware.hex");
-  assert(!strcmp(logbuf, "r1 "));   // caught in preflight: only the id read, no erase
+  assert(!strcmp(logbuf, "D r1 "));   // caught in preflight: only the devid and id reads, no erase
   // a file produced by an earlier read in the same script is fine
   logbuf[0] = 0;
   expect(run("read userid u-{id}.hex\nwrite u-{id}.hex\n"), SCRIPT_PASS, 0, "");
@@ -194,19 +211,152 @@ static void test_script_missing_file() {
   logbuf[0] = 0;
   expect(run("write u.hex\nread userid u.hex\n"), SCRIPT_ERROR, 1, "no u.hex");
   expect(run("read userid a.hex\nverify b.hex\n"), SCRIPT_ERROR, 2, "no b.hex");
-  assert(!logbuf[0]);
+  assert(!strcmp(logbuf, "D D "));
 }
 
 static void test_script_verify_mismatch() {
   reset_world();
   corrupt_flash_104 = true;
-  expect(run(DEFAULT_SCRIPT), SCRIPT_FAIL, 7, "verify 0x000104");
+  expect(run(DEFAULT_SCRIPT), SCRIPT_FAIL, 5, "verify 0x000104");
+  assert(strstr(logbuf, "r0 D "));   // the mismatch re-checked the target, which is still there
 }
 
 static void test_script_comm() {
   reset_world();
-  fail_at = 2;   // id read ok, "read userid" fails
+  fail_at = 3;   // devid and id read ok, "read userid" fails
   expect(run(DEFAULT_SCRIPT), SCRIPT_COMM, 1, "");
+}
+
+// No target, or not the part the sizes came from: comm error before anything is read or saved.
+static void test_script_devid_start() {
+  const uint16_t bad[] = {0x0000, 0xFFFF, 0x5400, 0x5560};
+  for (uint16_t id : bad) {
+    reset_world();
+    devid_val = id;
+    expect(run(DEFAULT_SCRIPT), SCRIPT_COMM, 0, "no target");
+    assert(!strcmp(logbuf, "D "));
+    assert(!find("userid-0102030405060708.hex") && !find("userid-0000000000000000.hex"));
+  }
+}
+
+// Board pulled mid-run: verify reads zeros. That's a comm error, not a FAIL.
+static void test_script_verify_target_gone() {
+  reset_world();
+  gone_at = 8;   // D r1 r1 r3 Ec w0 w2, then "verify firmware.hex" reads a missing chip
+  expect(run(DEFAULT_SCRIPT), SCRIPT_COMM, 5, "no target");
+  assert(strstr(logbuf, "r0 D "));
+}
+
+// C1: an interrupted run must never let a rerun overwrite the saved settings with
+// what the half-programmed board holds. userid goes last, so the rerun sees it blank.
+static void test_script_rerun_keeps_settings() {
+  for (int how = 0; how < 2; how++) {
+    reset_world();
+    if (how == 0) fail_at = 12;   // D r1 r1 r3 Ec w0 w2 r0 r2 w3 r3, then the userid write fails
+    else corrupt_ee_5 = true;     // or an EEPROM byte didn't take: verify settings FAILs
+    script_status s = run(DEFAULT_SCRIPT);
+    if (how == 0) expect(s, SCRIPT_COMM, 8, "");
+    else expect(s, SCRIPT_FAIL, 7, "verify 0xF00005");
+    char saved[8192];
+    strcpy(saved, find("settings-0102030405060708.hex")->text);
+    fail_at = 0;
+    corrupt_ee_5 = false;
+    logbuf[0] = 0;
+    expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 1, "blank userid");
+    assert(!strcmp(logbuf, "D r1 "));
+    assert(!strcmp(saved, find("settings-0102030405060708.hex")->text));
+  }
+}
+
+// Appends records to firmware.hex: a user ID (if uid) and EEPROM defaults.
+static void firmware_extra(bool uid) {
+  char hex[8192];
+  strcpy(hex, find("firmware.hex")->text);
+  *strstr(hex, ":00000001FF") = 0;   // drop the EOF, append more records
+  uint8_t p20[2] = {0x00, 0x20}, pf0[2] = {0x00, 0xF0}, id[8] = {9, 9, 9, 9, 9, 9, 9, 9}, d[16];
+  memset(d, 0x42, sizeof d);
+  if (uid) {
+    rec(hex, 4, 0, p20, 2);
+    rec(hex, 0, 0, id, 8);
+  }
+  rec(hex, 4, 0, pf0, 2);
+  rec(hex, 0, 0, d, 16);
+  strcat(hex, ":00000001FF\n");
+  set_file("firmware.hex", hex);
+}
+
+// I3: firmware.hex carrying EEPROM defaults (no user ID) still PASSes,
+// and the board keeps its own ID and settings.
+static void test_script_firmware_with_ee() {
+  reset_world();
+  uint8_t ee[EE_SZ];
+  memcpy(ee, chip[IHX_EEPROM], EE_SZ);
+  firmware_extra(false);
+  expect(run(DEFAULT_SCRIPT), SCRIPT_PASS, 0, "");
+  assert(!strcmp(logbuf, "D r1 r1 r3 Ec w0 w2 w3 r0 r2 r3 w3 r3 w1 r1 X "));
+  assert(!memcmp(chip[IHX_USERID], UID, 8));
+  assert(!memcmp(chip[IHX_EEPROM], ee, EE_SZ));
+}
+
+// firmware.hex with user-ID records before a later user-ID write would refill the
+// ID early, so an interrupted run's rerun would save half-written EEPROM as the
+// board's settings. Stopped in preflight, at the firmware line, before any erase.
+static void test_script_firmware_with_uid() {
+  reset_world();
+  firmware_extra(true);
+  expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 4, "firmware has userid");
+  assert(!strcmp(logbuf, "D r1 "));
+  assert(!find("settings-0102030405060708.hex") && !find("userid-0102030405060708.hex"));
+  // also when the later user-ID write is a file on FFat rather than one a read made
+  logbuf[0] = 0;
+  set_file("u.hex", find("firmware.hex")->text);
+  expect(run("erase chip\nwrite firmware.hex\nwrite u.hex\n"), SCRIPT_ERROR, 2, "firmware has userid");
+  assert(!strcmp(logbuf, "D "));
+  // with no later user-ID write it is the only ID source: fine
+  expect(run("erase chip\nwrite firmware.hex\nverify firmware.hex\n"), SCRIPT_PASS, 0, "");
+  // nor the other way round: the firmware's ID would overwrite the board's
+  expect(run("read userid u-{id}.hex\nwrite u-{id}.hex\nwrite firmware.hex\n"), SCRIPT_ERROR, 2, "firmware has userid");
+  // a verify of it doesn't count
+  expect(run("read userid u-{id}.hex\nverify firmware.hex\nwrite u-{id}.hex\n"), SCRIPT_PASS, 0, "");
+}
+
+// I1: a record beyond the detected part is caught before anything changes the chip.
+static void test_script_out_of_range() {
+  reset_world();
+  char hex[8192];
+  strcpy(hex, find("firmware.hex")->text);
+  *strstr(hex, ":00000001FF") = 0;
+  uint8_t d[2] = {0, 0}, p0[2] = {0, 0};
+  rec(hex, 4, 0, p0, 2);
+  rec(hex, 0, FLASH_SZ, d, 2);   // 0x8000: fine on a 64 KB part, not on this 32 KB one
+  strcat(hex, ":00000001FF\n");
+  set_file("firmware.hex", hex);
+  expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 4, "0x008000 outside chip");
+  assert(!strcmp(logbuf, "D r1 "));
+  // a bad checksum too
+  reset_world();
+  set_file("firmware.hex", ":0100000000FE\n:00000001FF\n");
+  expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 4, "bad checksum");
+  assert(!strcmp(logbuf, "D r1 "));
+}
+
+// Task 2 minor #2: a read name that won't fit once {id} expands is caught before the erase.
+static void test_script_read_expand() {
+  reset_world();
+  char s[160];
+  snprintf(s, sizeof s, "erase chip\nread eeprom %s{id}.hex\n",
+           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");   // 50 + 16 + 4 > 63
+  expect(run(s), SCRIPT_ERROR, 2, "syntax");
+  assert(!strcmp(logbuf, "D r1 "));
+}
+
+static void test_script_erase_eeprom() {
+  reset_world();
+  chip[IHX_FLASH][0] = 0x12;
+  expect(run("erase eeprom\n"), SCRIPT_PASS, 0, "");
+  assert(!strcmp(logbuf, "D Ee "));
+  for (int i = 0; i < EE_SZ; i++) assert(chip[IHX_EEPROM][i] == 0xFF);
+  assert(chip[IHX_FLASH][0] == 0x12 && !memcmp(chip[IHX_USERID], UID, 8));
 }
 
 static void test_script_config_mask() {
@@ -262,6 +412,14 @@ int main() {
   test_script_missing_file();
   test_script_verify_mismatch();
   test_script_comm();
+  test_script_devid_start();
+  test_script_verify_target_gone();
+  test_script_rerun_keeps_settings();
+  test_script_firmware_with_ee();
+  test_script_firmware_with_uid();
+  test_script_out_of_range();
+  test_script_read_expand();
+  test_script_erase_eeprom();
   test_script_config_mask();
   test_script_crlf();
   test_script_syntax();

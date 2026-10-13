@@ -12,8 +12,8 @@
 #define P11_US  15000   // self-timed bulk erase (X5/X6 parts; X3/X4 need 12 ms)
 #define P11A_US 4000    // data EEPROM byte write
 
-void     icsp_init();                    // MCLR_LOW on, VPP off, PGC/PGD low outputs
-void     icsp_enter();                   // reset, PGC/PGD low, MCLR_LOW off, 5 µs, VPP on, 100 µs
+void     icsp_init();                    // VPP off, 5 µs, MCLR_LOW on, PGC/PGD low outputs
+void     icsp_enter();                   // VPP off, 5 µs, reset, PGC/PGD low, MCLR_LOW off, 5 µs, VPP on, 100 µs
 void     icsp_exit();                    // VPP off, 5 µs, MCLR_LOW on, PGC/PGD inputs
 void     icsp_release();                 // MCLR_LOW off: the target runs (call after icsp_exit)
 void     icsp_core(uint16_t instr);      // command 0000 + 16-bit instruction

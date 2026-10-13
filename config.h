@@ -4,8 +4,8 @@
 // HV ICSP, PICkit 2 style MCLR drive (see docs/design.md, Hardware).
 #define PGD_PIN         1   // bidirectional data
 #define PGC_PIN         2   // jig drives the clock
-#define MCLR_LOW_PIN    3   // NPN pulls MCLR to GND; on by default (target held in reset)
-#define VPP_ON_PIN      10  // NPN + PNP switch putting 9 V on MCLR
+#define MCLR_LOW_PIN    3   // N-MOSFET pulls MCLR to GND; on by default (target held in reset)
+#define VPP_ON_PIN      10  // N-MOSFET + P-MOSFET switch putting 9 V on MCLR
 
 // ICSP clock half-period in ESP32 CPU cycles (240 MHz). 240 ≈ 1 µs; DS41398 min
 // is 100 ns, so this is the cable-length knob. Raise it for long cables.
