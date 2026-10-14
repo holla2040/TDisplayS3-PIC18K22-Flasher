@@ -132,12 +132,14 @@ static script_status do_read(ctx *c, int line, const cmd *k, const char *name) {
   return ok ? status(SCRIPT_PASS, line) : status(SCRIPT_ERROR, line, "save %s", name);
 }
 
-// Loads and parses a HEX file into c->img (nothing is written to the chip yet).
+// Loads and parses a HEX or compact binary (.pbin, gzipped or not) into c->img
+// (nothing is written to the chip yet).
 static script_status load_hex(ctx *c, int line, const char *name) {
-  char *txt = c->fs->load(name);
+  size_t len = 0;
+  char *txt = c->fs->load(name, &len);
   if (!txt) return status(SCRIPT_ERROR, line, "no %s", name);
   script_status s = status(SCRIPT_PASS, line);
-  if (!ihx_parse(txt, &c->img, s.msg, sizeof s.msg)) s.result = SCRIPT_ERROR;
+  if (!ihx_parse_any((const uint8_t *)txt, len, &c->img, s.msg, sizeof s.msg)) s.result = SCRIPT_ERROR;
   free(txt);
   return s;
 }

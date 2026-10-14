@@ -20,7 +20,7 @@ struct pic_ops {
 };
 
 struct fs_ops {
-  char *(*load)(const char *name);                       // malloc'd, NUL-terminated; nullptr if missing
+  char *(*load)(const char *name, size_t *len);          // malloc'd, NUL-terminated, *len = bytes (gunzipped if gzip); nullptr if missing
   bool  (*save)(const char *name, const char *text, size_t len);
 };
 

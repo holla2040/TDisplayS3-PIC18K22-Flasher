@@ -70,7 +70,11 @@ static file *find(const char *name) {
   for (auto &f : files) if (f.text && !strcmp(f.name, name)) return &f;
   return nullptr;
 }
-static char *fs_load(const char *name) { file *f = find(name); return f ? strdup(f->text) : nullptr; }
+static char *fs_load(const char *name, size_t *len) {
+  file *f = find(name);
+  if (f && len) *len = strlen(f->text);
+  return f ? strdup(f->text) : nullptr;
+}
 static bool fs_save(const char *name, const char *text, size_t len) {
   file *f = find(name);
   for (int i = 0; !f && i < 16; i++) if (!files[i].text) f = &files[i];

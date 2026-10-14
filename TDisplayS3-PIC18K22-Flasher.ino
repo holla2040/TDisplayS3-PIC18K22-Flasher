@@ -12,6 +12,8 @@
 #include "icsp.h"
 #include "pic18k22.h"
 #include "script.h"
+#include "ihx.h"
+#include "miniz.h"   // ESP32-S3 ROM tinfl (esp_rom), for gzip files
 #include "webpage.h"
 
 #define PROJECTNAME "PIC18Flasher"
@@ -148,8 +150,42 @@ static bool validName(const char *n) {
   return true;
 }
 
+// gzip (RFC 1952) to a malloc'd, NUL-terminated buffer, inflated with the ROM's
+// tinfl. The decompressor (~11 KB) goes on the heap: too big for the loop stack.
+// nullptr on a bad header, bad data, size mismatch or CRC mismatch.
+static char *gunzip(const uint8_t *in, size_t n, size_t *outLen) {
+  if (n < 18 || in[0] != 0x1F || in[1] != 0x8B || in[2] != 8) return nullptr;
+  uint8_t flg = in[3];
+  size_t p = 10;
+  if (flg & 4) p += 2 + (in[p] | in[p + 1] << 8);              // FEXTRA
+  if (flg & 8) while (p < n && in[p++]) {}                     // FNAME
+  if (flg & 16) while (p < n && in[p++]) {}                    // FCOMMENT
+  if (flg & 2) p += 2;                                         // FHCRC
+  if (p + 8 > n) return nullptr;
+  const uint8_t *t = in + n - 8;
+  uint32_t crc = t[0] | t[1] << 8 | t[2] << 16 | (uint32_t)t[3] << 24;
+  uint32_t size = t[4] | t[5] << 8 | t[6] << 16 | (uint32_t)t[7] << 24;
+  if (size > 4 * 1024 * 1024) return nullptr;                  // ponytail: cap; a K22 image is < 200 KB as HEX
+  char *out = (char *)malloc(size + 1);
+  tinfl_decompressor *d = (tinfl_decompressor *)malloc(sizeof(tinfl_decompressor));
+  bool ok = out && d;
+  if (ok) {
+    tinfl_init(d);
+    size_t inSz = n - 8 - p, outSz = size;
+    tinfl_status st = tinfl_decompress(d, in + p, &inSz, (uint8_t *)out, (uint8_t *)out, &outSz,
+                                       TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+    ok = st == TINFL_STATUS_DONE && outSz == size && ihx_crc32((uint8_t *)out, size) == crc;
+  }
+  free(d);
+  if (!ok) { free(out); return nullptr; }
+  out[size] = 0;
+  *outLen = size;
+  return out;
+}
+
 // fs_ops for the script runner. Names come from script text, so they get the same check.
-static char *fsLoad(const char *name) {
+// A gzip file comes back already inflated (HEX or .pbin inside).
+static char *fsLoad(const char *name, size_t *len) {
   if (!validName(name)) return nullptr;
   char path[40];
   snprintf(path, sizeof(path), "/%s", name);
@@ -161,6 +197,13 @@ static char *fsLoad(const char *name) {
   size_t got = f.read((uint8_t *)buf, sz);
   f.close();
   buf[got] = 0;
+  *len = got;
+  if (got >= 2 && (uint8_t)buf[0] == 0x1F && (uint8_t)buf[1] == 0x8B) {
+    char *raw = gunzip((uint8_t *)buf, got, len);
+    free(buf);
+    if (!raw) Serial.printf("%s: bad gzip\n", name);
+    return raw;
+  }
   return buf;
 }
 
@@ -378,7 +421,8 @@ static bool runScript(const char *name) {
     Serial.println("script: no part, comm error, retrying");
     return false;
   }
-  char *text = fsLoad(name);
+  size_t textLen;
+  char *text = fsLoad(name, &textLen);
   if (!text) {
     Serial.printf("script: no %s\n", name);
     showResult("no script", TFT_ORANGE, name);

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 #include "ihx.h"
 
 enum { FLASH_SZ = 65536, UID_SZ = 8, CFG_SZ = 14, EE_SZ = 1024 };
@@ -128,6 +129,56 @@ static void test_ihx_truncated() {
   }
 }
 
+// Compact binary: "PICB", [u32 addr][u16 len][data]..., CRC32. Builds one in buf.
+static size_t pbin(uint8_t *buf, const uint32_t *addr, const uint8_t *const *data, const uint16_t *n, int segs) {
+  size_t p = 4;
+  memcpy(buf, "PICB", 4);
+  for (int i = 0; i < segs; i++) {
+    for (int k = 0; k < 4; k++) buf[p++] = addr[i] >> 8 * k;
+    buf[p++] = n[i]; buf[p++] = n[i] >> 8;
+    memcpy(buf + p, data[i], n[i]); p += n[i];
+  }
+  uint32_t c = ihx_crc32(buf, p);
+  for (int k = 0; k < 4; k++) buf[p++] = c >> 8 * k;
+  return p;
+}
+
+static void test_pbin() {
+  static img_buf a, b;
+  static uint8_t buf[256];
+  char err[48];
+  assert(ihx_crc32((const uint8_t *)"123456789", 9) == 0xCBF43926);   // zlib check value
+  setup(&a); setup(&b);
+  uint8_t f[4] = {0xEF, 0x04, 0xF0, 0x00}, c[2] = {0x28, 0x85}, e = 0x5A;
+  const uint32_t addr[3] = {0x000000, 0x300001, 0xF00003};
+  const uint8_t *const data[3] = {f, c, &e};
+  const uint16_t n[3] = {4, 2, 1};
+  size_t len = pbin(buf, addr, data, n, 3);
+  assert(ihx_parse_any(buf, len, &a.img, err, sizeof err));
+  // same image as the equivalent HEX
+  char hex[512] = "";
+  uint8_t p30[2] = {0x00, 0x30}, pF0[2] = {0x00, 0xF0};
+  rec(hex, 0, 0, f, 4); rec(hex, 4, 0, p30, 2); rec(hex, 0, 1, c, 2);
+  rec(hex, 4, 0, pF0, 2); rec(hex, 0, 3, &e, 1); strcat(hex, ":00000001FF\n");
+  assert(ihx_parse_any((const uint8_t *)hex, strlen(hex), &b.img, err, sizeof err));
+  assert(!memcmp(&a, &b, offsetof(img_buf, img)));
+  // corrupt one data byte: bad CRC
+  buf[11] ^= 1;
+  assert(!ihx_parse_any(buf, len, &a.img, err, sizeof err) && !strcmp(err, "bad CRC"));
+  buf[11] ^= 1;
+  // a length running past the end (CRC recomputed so only the framing is wrong)
+  const uint16_t big[1] = {200};
+  len = pbin(buf, addr, data, n, 1);
+  buf[8] = big[0];
+  uint32_t cc = ihx_crc32(buf, len - 4);
+  for (int k = 0; k < 4; k++) buf[len - 4 + k] = cc >> 8 * k;
+  assert(!ihx_parse_any(buf, len, &a.img, err, sizeof err) && !strcmp(err, "malformed pbin"));
+  // an address outside every region
+  const uint32_t out[1] = {0x200008};
+  len = pbin(buf, out, data, n, 1);
+  assert(!ihx_parse_any(buf, len, &a.img, err, sizeof err) && !strcmp(err, "0x200008 outside chip"));
+}
+
 int main() {
   test_ihx_roundtrip();
   test_ihx_xc8_layout();
@@ -135,6 +186,7 @@ int main() {
   test_ihx_bad_checksum();
   test_ihx_small_part();
   test_ihx_truncated();
+  test_pbin();
   puts("ok");
   return 0;
 }

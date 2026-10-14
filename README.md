@@ -369,6 +369,17 @@ the timing constants in `icsp.h`, not a measurement.
   write, or leave the board stuck at `EE locked` on its next reflash. And
   erasing the user-ID block (done before every user-ID write) on a
   code-protected chip erases all program memory (DS41398B §3.1.1).
+- **`LVP = ON` is mandatory** (`#pragma config LVP = ON`, CONFIG4L 0x300006
+  bit 2). The jig refuses a `write` that clears it (`hex clears LVP`), and
+  `tools/hex2pbin.py` refuses to convert such a HEX.
+- **Smaller files: `.pbin` and `.pbin.gz`.** `python3 tools/hex2pbin.py
+  firmware.hex` writes `firmware.pbin` (compact binary: `PICB`, then
+  `[u32 address][u16 length][data]` per run, then a CRC32; about the size of
+  the code) and `firmware.pbin.gz` (gzipped, about a fifth of the HEX: R4's
+  45 KB HEX is a 9 KB `.pbin.gz`). Name either in a script exactly like a
+  `.hex` (`write firmware.pbin.gz` / `verify firmware.pbin.gz`): the jig tells
+  the format from the file's first bytes and inflates gzip itself (the
+  ESP32-S3 ROM's `tinfl`), checking the CRCs.
 - Build `firmware.hex` **without user-ID (IDLOC) records**: the default script
   writes the board's own user ID last, and stops with `firmware has userid`
   if the firmware carries one too.

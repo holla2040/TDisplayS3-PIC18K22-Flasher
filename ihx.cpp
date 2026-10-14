@@ -82,6 +82,42 @@ bool ihx_parse(const char *text, ihx_image *img, char *err, size_t errlen) {
   return true;   // no EOF record — tolerate, some tools omit it
 }
 
+uint32_t ihx_crc32(const uint8_t *buf, size_t len) {
+  uint32_t c = 0xFFFFFFFF;
+  for (size_t i = 0; i < len; i++) {
+    c ^= buf[i];
+    for (int k = 0; k < 8; k++) c = c >> 1 ^ (0xEDB88320 & -(c & 1));
+  }
+  return ~c;
+}
+
+static uint32_t le(const uint8_t *p, int n) {
+  uint32_t v = 0;
+  while (n--) v = v << 8 | p[n];
+  return v;
+}
+
+bool ihx_parse_any(const uint8_t *buf, size_t len, ihx_image *img, char *err, size_t errlen) {
+  if (len < 4 || memcmp(buf, "PICB", 4)) return ihx_parse((const char *)buf, img, err, errlen);
+  for (int r = 0; r < IHX_NREGIONS; r++) {
+    memset(img->r[r].data, 0xFF, img->r[r].size);
+    memset(img->r[r].mask, 0, img->r[r].size);
+  }
+  if (len < 8) return fail(err, errlen, "malformed pbin", 0);
+  size_t end = len - 4;
+  if (ihx_crc32(buf, end) != le(buf + end, 4)) return fail(err, errlen, "bad CRC", 0);
+  for (size_t p = 4; p < end; ) {
+    if (end - p < 6) return fail(err, errlen, "malformed pbin", 0);
+    uint32_t addr = le(buf + p, 4), n = le(buf + p + 4, 2);
+    p += 6;
+    if (end - p < n) return fail(err, errlen, "malformed pbin", 0);
+    for (uint32_t i = 0; i < n; i++)
+      if (!put(img, addr + i, buf[p + i])) return fail(err, errlen, "0x%06X outside chip", addr + i);
+    p += n;
+  }
+  return true;
+}
+
 size_t ihx_write(const ihx_image *img, int region, char *out, size_t outmax) {
   const ihx_region *g = &img->r[region];
   char *o = out;
