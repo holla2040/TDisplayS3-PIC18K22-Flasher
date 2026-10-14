@@ -1,8 +1,8 @@
 # TDisplayS3-PIC18K22-Flasher
 
 Standalone production flasher for PIC18(L)F2xK22 / 4xK22 microcontrollers: a
-LilyGO T-Display S3 (ESP32-S3) programs the target over high-voltage ICSP. No
-PC, no PICkit on the line. A small text script on the jig says what to do
+LilyGO T-Display S3 (ESP32-S3) programs the target over low-voltage ICSP
+(LVP): five wires, no other parts. No PC, no PICkit on the line. A small text script on the jig says what to do
 (save the board's EEPROM settings, erase, write the firmware, restore the
 settings, verify). You load the firmware and the script to the jig over WiFi
 once; after that an operator connects a board, the jig runs the script, and
@@ -10,11 +10,9 @@ the screen shows PASS or FAIL. The jig is generic: it isn't tied to one
 board, and each board's EEPROM settings are kept on the jig per board, so they
 survive a full reflash.
 
-**Status: nothing has been run on hardware yet.** The firmware builds, and the
-host tests pass (`make test`). The programming timing and command values were
-taken from DS41398B by the implementer while writing the code; the circuit and
-resistor values below are the PICkit 2 MCLR drive with values picked for this
-jig. Plan a bring-up on a known board (see [Status](#status)).
+**Status:** LVP programming works on hardware (Trace R0, PIC18F46K22): probe,
+read, erase, write, verify and reset. The full default `flash.txt` (EEPROM and
+user ID handling) hasn't been run on a real board yet; see [Status](#status).
 
 Sibling projects (same screen, web page and state machine; only the wire and
 device layers differ):
@@ -27,11 +25,8 @@ device layers differ):
 |---|---|
 | LilyGO T-Display S3, LCD version (not AMOLED), 16 MB flash / 8 MB PSRAM | The build assumes 16 MB flash and OPI PSRAM. |
 | Target with a PIC18(L)F K22 | Any of the 16 parts in [Supported targets](#supported-targets-and-limits), on your own board or a bare chip. 3.3 V only. |
-| On-board 5 V to 8.5 V boost circuit | Makes VPP from the jig's 5 V. MT3608-class (LCSC C84817) with its inductor, Schottky diode, capacitors and feedback divider set for 8.5 V. See [Wiring](#wiring). |
-| 2 x AO3400A N-channel MOSFET, 1 x AO3401A P-channel MOSFET (SOT-23) | The MCLR drive; see [Wiring](#wiring). |
-| Resistors: 100 Ω, 10 kΩ, 4 x 1 kΩ | R2, R4, R1/R3/R5/R6. The 10 kΩ pull-down R4 on GPIO10 is **required**. |
-| 6 wires, or a pogo-pin / clip fixture | Keep them short. |
-| 5 V USB-C supply for the jig | The only supply: the jig powers the target from its 3V3 pin and the boost circuit from its 5V pin. |
+| 5 wires (4 if the target has its own supply), or a pogo-pin / clip fixture | Keep them short. See [Wiring](#wiring). |
+| 5 V USB-C supply for the jig | The jig powers the target from its 3V3 pin. |
 | A computer with arduino-cli | Only to build the jig firmware. |
 
 ## Build the jig firmware
@@ -77,6 +72,86 @@ release BOOT, then upload. After that, updates can go over WiFi
 ([Updating the jig](#updating-the-jig)).
 
 ## Wiring
+
+The jig programs over low-voltage ICSP (LVP), the default build
+(`#define ICSP_LVP 1` in `config.h`). Every `firmware.hex` must keep `LVP` = 1;
+the jig refuses one that clears it (`hex clears LVP`). Tested on Trace R0
+boards (PIC18F46K22): probe, read, erase, write, verify and reset.
+
+LVP applies when the target keeps `LVP` = 1 (CONFIG4L 0x300006 bit 2). LVP is
+on from the factory (DS41398B §5.3: "The LVP bit defaults to a '1' (enabled)
+from the factory"; datasheet DS40001412G §24.9 note 2: enabled in
+unprogrammed and erased devices; Table 24-1 CONFIG4L default `1000 0101`,
+0x85), so a new board takes LVP with no HV step. The K22 has no PGM pin:
+entry is a key sequence on PGD while MCLR is low. Once in LVP mode MCLR is
+always enabled, whatever `MCLRE` says (DS41398B §2.1.1 note 2), so
+`MCLRE` = 0 targets work too. A Trace R0 board read with a PICkit 5
+(2026-10-13) had CONFIG4L 0x85 (`LVP` = 1) and CONFIG3H 0x3D (`MCLRE` = 0).
+
+![T-Display S3 to PIC18(L)F K22 LVP wiring](docs/wiring-lvp.png)
+
+Five wires, no other parts (four if the target has its own supply: leave pin 2 off):
+
+| T-Display S3 | Target ICSP header (5-pin; Trace R0: J7) |
+|---|---|
+| GPIO 3 | pin 1, MCLR (driven high and low, push-pull) |
+| 3V3 | pin 2, VDD |
+| GND | pin 3, GND |
+| GPIO 1 | pin 4, PGD |
+| GPIO 2 | pin 5, PGC |
+
+MCLR only swings between GND and VDD, so GPIO3 drives it directly. The target
+needs no MCLR pull-up (Trace R0 has none): with `LVP` = 1 the PIC's MCLR is
+always enabled and its internal weak pull-up is always on (datasheet §10.6.3).
+GPIO10 is unused.
+
+- A reset supervisor or button on the target's MCLR must not fight GPIO3:
+  open-drain only, or isolated with a diode.
+- GPIO3 is an ESP32-S3 strapping pin and floats until `setup()` runs: MCLR is
+  undefined for about 300 ms at jig boot.
+- The jig powers the target from its 3V3 pin. If the target is powered from
+  its own supply instead, leave pin 2 unconnected, so the two never fight.
+  On Trace R0, pin 2 is the 3V3D rail, the output of LDO U6 (MCP1703A):
+  powering the board through pin 2 back-feeds U6 and its 12 V input rail.
+- Keep wires short. If connections are flaky, raise `ICSP_HALF_PERIOD` in
+  `config.h` (240 CPU cycles, about 1 µs per half clock, is the default).
+- No target connected reads as `no target`: PGC and PGD have internal
+  pull-downs, so the device ID reads 0x0000.
+
+### Entry and exit (DS41398B §2.6, Figures 2-14 and 2-15, §6.0 timing)
+
+Entry, VDD already up (P13: VDD up at least 100 ns before MCLR rises):
+
+1. MCLR at VIH, then to VIL: GPIO3 high (no minimum hold time at VIH), then
+   low. PGC and PGD low and driven.
+2. Wait **P18 ≥ 1 ms** from that MCLR fall to the first PGC rise.
+3. Clock the 32-bit key **4D434850h** (`0100 1101 0100 0011 0100 1000 0101
+   0000`) onto PGD, **MSb first** ("The Most Significant bit of the most
+   significant nibble must be shifted in first"). The command frames after
+   entry stay LSb first, so `write_bits()` can't send the key as it is.
+4. Wait **P20 ≥ 40 ns** after the last key PGC falls, then GPIO3 high: MCLR
+   back to VIH, and held there for the whole session.
+5. Wait **P15 ≥ 400 µs** after MCLR rises before the first data on PGD.
+   "Signals appearing on PGD before P15 has elapsed may not be interpreted as
+   valid."
+
+Everything after entry (commands, table reads and writes, the P9/P10/P11
+holds) is the same as HV.
+
+Exit: **P16 ≥ 0** after the last PGC falls, then GPIO3 low (MCLR to VIL).
+Release: GPIO3 high, and the target runs its application.
+
+- **Keep `LVP` = 1.** `LVP` can be set or cleared only by high-voltage
+  programming (DS41398B §5.3; datasheet §24.9), so a board whose firmware
+  cleared it can't be entered over LVP at all. The jig refuses a `write` whose
+  CONFIG4L clears it.
+- `erase chip` in LVP mode needs VDD inside D111 (DS41398B §3.1.2: 2.7 V
+  minimum for bulk erase); the jig's 3V3 meets it.
+
+## High-voltage option
+
+The exception: build with `#define ICSP_LVP 0` in `config.h` and build this
+circuit. Only for a part whose `LVP` bit is already cleared.
 
 3.3 V target, high-voltage ICSP. Besides PGC, PGD and VDD, the jig has to
 switch the target's MCLR pin between ground (reset), floating, and 9 V (HV
@@ -152,86 +227,6 @@ The pins are set in `config.h`.
   4.5 mA from the boost rail while VPP is on. Q1 and Q3 body diodes stay
   reverse-biased (MCLR stays between 0 and 9 V).
 
-## Low-voltage programming (LVP)
-
-**LVP is the programming mode for the Trace / Module Monitor boards
-(PIC18F46K22).** No 8.5 V boost is built for them, and every `firmware.hex`
-for them must keep `LVP` = 1. **The jig firmware doesn't do LVP yet:**
-`icsp.cpp` only has the HV entry (`icsp_enter()`, MCLR to 9 V). This section
-is the wiring and the protocol it will use.
-
-LVP applies when the target keeps `LVP` = 1 (CONFIG4L 0x300006 bit 2). LVP is
-on from the factory (DS41398B §5.3: "The LVP bit defaults to a '1' (enabled)
-from the factory"; datasheet DS40001412G §24.9 note 2: enabled in
-unprogrammed and erased devices; Table 24-1 CONFIG4L default `1000 0101`,
-0x85), so a new board takes LVP with no HV step. The K22 has no PGM pin:
-entry is a key sequence on PGD while MCLR is low. Once in LVP mode MCLR is
-always enabled, whatever `MCLRE` says (DS41398B §2.1.1 note 2), so
-`MCLRE` = 0 targets work too. A Trace R0 board read with a PICkit 5
-(2026-10-13) had CONFIG4L 0x85 (`LVP` = 1) and CONFIG3H 0x3D (`MCLRE` = 0).
-
-![T-Display S3 to PIC18(L)F K22 LVP wiring](docs/wiring-lvp.png)
-
-Five wires, no other parts:
-
-| T-Display S3 | Target ICSP header (5-pin; Trace R0: J7) |
-|---|---|
-| GPIO 3 | pin 1, MCLR (driven high and low, push-pull) |
-| 3V3 | pin 2, VDD |
-| GND | pin 3, GND |
-| GPIO 1 | pin 4, PGD |
-| GPIO 2 | pin 5, PGC |
-
-The HV parts in [Wiring](#wiring) (the boost, Q1-Q3, R1-R6) exist only
-because HV puts 9 V on MCLR, which would destroy a GPIO. In LVP, MCLR only
-swings between GND and VDD, so GPIO3 drives it directly, and the target
-needs no MCLR pull-up (Trace R0 has none). GPIO10 (`VPP_ON`) is unused.
-
-- A reset supervisor or button on the target's MCLR must not fight GPIO3:
-  open-drain only, or isolated with a diode.
-- GPIO3 is an ESP32-S3 strapping pin and floats until `setup()` runs: MCLR is
-  undefined for about 300 ms at jig boot.
-- The jig powers the target from its 3V3 pin. If the target is powered from
-  its own supply instead, leave pin 2 unconnected, so the two never fight.
-  On Trace R0, pin 2 is the 3V3D rail, the output of LDO U6 (MCP1703A):
-  powering the board through pin 2 back-feeds U6 and its 12 V input rail.
-
-### Entry and exit (DS41398B §2.6, Figures 2-14 and 2-15, §6.0 timing)
-
-Entry, VDD already up (P13: VDD up at least 100 ns before MCLR rises):
-
-1. MCLR at VIH, then to VIL: GPIO3 high (no minimum hold time at VIH), then
-   low. PGC and PGD low and driven.
-2. Wait **P18 ≥ 1 ms** from that MCLR fall to the first PGC rise.
-3. Clock the 32-bit key **4D434850h** (`0100 1101 0100 0011 0100 1000 0101
-   0000`) onto PGD, **MSb first** ("The Most Significant bit of the most
-   significant nibble must be shifted in first"). The command frames after
-   entry stay LSb first, so `write_bits()` can't send the key as it is.
-4. Wait **P20 ≥ 40 ns** after the last key PGC falls, then GPIO3 high: MCLR
-   back to VIH, and held there for the whole session.
-5. Wait **P15 ≥ 400 µs** after MCLR rises before the first data on PGD.
-   "Signals appearing on PGD before P15 has elapsed may not be interpreted as
-   valid."
-
-Everything after entry (commands, table reads and writes, the P9/P10/P11
-holds) is the same as HV.
-
-Exit: **P16 ≥ 0** after the last PGC falls, then GPIO3 low (MCLR to VIL).
-Release: GPIO3 high, and the target runs its application.
-
-- **A part with `LVP` = 0 needs one HV pass first.** `LVP` can be set or
-  cleared only in HV mode (DS41398B §5.3; datasheet §24.9). A board whose
-  firmware cleared it can't be entered over LVP at all; program it once on an
-  HV jig (or MPLAB with a PICkit) with a `firmware.hex` that has `LVP` = 1.
-- **LVP mode can't clear `LVP`**, so programming over LVP can't lock a part
-  out of LVP. Keep `LVP` = 1 in `firmware.hex` anyway: a config write in LVP
-  mode leaves the bit as it is, and what the config `verify` reports for an
-  `LVP` = 0 HEX in that case hasn't been tested.
-- `erase chip` in LVP mode needs VDD inside D111 (DS41398B §3.1.2: 2.7 V
-  minimum for bulk erase); the jig's 3V3 meets it.
-- HV entry keeps working on these parts: "The High-Voltage ICSP mode is always
-  available, regardless of the state of the LVP bit" (DS41398B §2.1.1 note 1).
-
 ## First boot and WiFi
 
 WiFi is only needed to load files and to watch status from a browser.
@@ -274,8 +269,8 @@ verify userid-{id}.hex
 reset
 ```
 
-`flash.txt` runs when a board is inserted (auto mode) or when KEY is pressed
-(manual mode). Any `*.txt` on the jig can also be started from the web page
+`flash.txt` runs when KEY is pressed (manual mode, the default) or when a
+board is inserted (auto mode). Any `*.txt` on the jig can also be started from the web page
 (**Run**) or with `POST /run`. Edit `flash.txt` on the web page, or upload a
 replacement.
 
@@ -405,8 +400,9 @@ and `DELETE /file?name=` do the same. Download `settings-<id>.hex` and
 
 ### Operator steps
 
-1. Power the jig. The home screen shows the board status, the board's user ID,
-   the counters and the IP address.
+1. Power the jig and press BOOT once to switch to auto mode (the jig starts in
+   manual mode; the web page shows the mode). The home screen shows the board
+   status, the board's user ID, the counters and the IP address.
 2. Connect a board. Within about a second the jig detects it, shows the part
    name and user ID, then switches to the flash screen: the script name, the
    part, and the current script line.
@@ -426,16 +422,17 @@ within about 3 s look like one board, and the second is not run; its home
 screen still shows the first board's result. Leave the jig empty until the
 result clears when that can happen.
 
-While idle, the jig probes for a board once a second: it enters HV programming
+In auto mode the jig probes for a board once a second: it enters programming
 mode, reads the device ID and the user ID, and releases the target. **A board
-left on the jig is therefore reset once a second** (one HV session per probe)
-and runs only between probes: don't run functional tests while it's connected.
+left on the jig is therefore reset once a second** and runs only between
+probes. Manual mode (the default) doesn't poll: it probes once at boot and
+before each run, then leaves the target running.
 
 ### Screen messages
 
 | Screen | Meaning | What to do |
 |---|---|---|
-| `no target` | Nothing answered (device ID read 0x0000 or 0xFFFF). | Check the connection, power, MCLR circuit and the boost output (8.5 V). |
+| `no target` | Nothing answered (device ID read 0x0000 or 0xFFFF). | Check the connection, power and the MCLR wire, and that the part has `LVP` = 1. |
 | `PIC18F46K22` (or another part name) | Board detected. | - |
 | `id 0123456789ABCDEF` | The board's user ID: what `{id}` expands to. | - |
 | `id blank` | User ID is all 0xFF. | Program an ID, or the default script stops with `blank userid`. |
@@ -501,11 +498,11 @@ Programming the user ID back with MPLAB and rerunning `flash.txt` also works.
 - `pass` and `fail` count script results since power-up, not boards: a board
   reconnected and run again counts again. They reset on power-cycle;
   record them first. `comm error` and the orange script errors count as neither.
-- Auto mode (the default) runs `flash.txt` on every newly connected board. The
-  mode isn't shown on the screen; the web page shows it. A short press of BOOT
-  switches to manual mode, where nothing runs until KEY (GPIO14) is pressed. If
-  boards are detected but never run, the jig is in manual mode: press BOOT
-  once or power-cycle (it always starts in auto).
+- Manual mode (the default) runs nothing until KEY (GPIO14) is pressed or a
+  script is started from the web page, and doesn't poll, so a programmed board
+  keeps running. A short press of BOOT switches to auto mode, which runs
+  `flash.txt` on every newly connected board. The mode isn't shown on the
+  screen; the web page shows it. The jig always starts in manual mode.
 - KEY during the 1 s result display reruns the same board, in either mode.
 - BOOT held 5 s forgets WiFi ([above](#first-boot-and-wifi)).
 
@@ -535,10 +532,8 @@ The 16 parts the jig knows, by device ID (the ID register with its 5 revision bi
 
 - The table is in `pic18k22.cpp`. Device IDs are from DS41398 Table 5-2 and sizes
   from the MPLAB X PIC18F-K_DFP 1.14.301 device files.
-- **HV ICSP only, for now.** LVP is the mode for the Trace boards (parts
-  that keep `LVP` = 1), but the jig firmware doesn't implement its entry
-  yet. The wiring and protocol are documented in
-  [Low-voltage programming (LVP)](#low-voltage-programming-lvp).
+- **LVP by default:** the target must keep `LVP` = 1 (the factory value). See
+  [Wiring](#wiring); [High-voltage option](#high-voltage-option) is the exception.
 - **3.3 V targets only.** 5 V targets are out of scope.
 - Other PIC families, a jig-assigned serial number, authentication and
   per-board logging beyond the saved settings files are out of scope.
@@ -585,9 +580,9 @@ itself logs nothing: ICSP gives it nothing to report.
 | `uploaded <file>` | A file arrived over the web page / `/file`. |
 | `mode: auto` / `mode: manual` | BOOT short press. |
 
-`no target` with a board connected: check VDD (3V3 at ICSP pin 2), PGD/PGC
-continuity, and that MCLR actually reaches the target (about 9 V on it while a
-script runs). If MCLR sees 9 V while the jig is still booting, check R4.
+`no target` with a board connected: check VDD (3.3 V at ICSP pin 2), PGD/PGC
+continuity, that MCLR (GPIO3) reaches ICSP pin 1, and that the part still has
+`LVP` = 1 (a PICkit can read CONFIG4L, 0x300006 bit 2).
 
 Boards that show a part name but fail the verify: weak connections (raise
 `ICSP_HALF_PERIOD`), a 3.3 V rail that sags under the board's load, or
@@ -621,18 +616,19 @@ code-protected flash/EEPROM from a previous life (`erase chip` clears code prote
   against DS41398B (the programming specification) during development; P10 is
   200 µs per the document. The user-ID bulk-erase code (0088h, Table 3-1) was
   re-checked against the PDF in review; the rest has not been re-checked.
-- **Not yet run on hardware.** On a known K22 board, bring it up in this order:
-  1. The probe shows the right part name and user ID.
-  2. Load known EEPROM contents and a user ID with MPLAB, run `flash.txt`, and
+- **On hardware (Trace R0, PIC18F46K22, LVP):** probe, `read`, `erase chip`,
+  `write`, `verify` and `reset` work, from KEY and from the web page; test
+  images programmed by the jig run and read back byte-identical. Still to test:
+  1. Load known EEPROM contents and a user ID with MPLAB, run `flash.txt`, and
      confirm in MPLAB that the EEPROM and user ID survived and the new firmware runs.
-  3. A board with a blank user ID shows `blank userid` and is untouched.
-  4. A `firmware.hex` with EEPROM data passes, and the board keeps its own
+  2. A board with a blank user ID shows `blank userid` and is untouched (seen).
+  3. A `firmware.hex` with EEPROM data passes, and the board keeps its own
      settings and user ID.
-  5. Pull a board during the settings write, reseat it: `blank userid`, and its
+  4. Pull a board during the settings write, reseat it: `blank userid`, and its
      `settings-<id>.hex` is unchanged.
-  6. A `firmware.hex` with `CP0` = 0 and `CPD` = 0: do the bits take effect
+  5. A `firmware.hex` with `CP0` = 0 and `CPD` = 0: do the bits take effect
      before the reset? Until this is known, see [Making the files](#making-the-files).
-  7. Scope MCLR on HV entry and exit: no overlap, it reaches 9 V.
+  6. Auto mode: insertion, removal and swap detection.
 
 ## Design
 

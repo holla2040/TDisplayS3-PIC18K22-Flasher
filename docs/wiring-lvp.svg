@@ -150,5 +150,5 @@
 <text x="772" y="613" font-size="11.5" fill="#444">Wait P15 ≥ 400 µs, then the usual LSb-first frames.</text>
 <text x="772" y="630" font-size="11.5" fill="#444">Exit: GPIO3 low (P16 ≥ 0 after the last PGC).</text>
 <text x="772" y="647" font-size="11.5" fill="#444">Release: GPIO3 high, the target runs.</text>
-<text x="772" y="666" font-size="11.5" fill="#a04f00" font-weight="bold">Not in the jig firmware yet: icsp.cpp is HV only.</text>
+<text x="772" y="666" font-size="11.5" fill="#a04f00" font-weight="bold">Default build: #define ICSP_LVP 1 (config.h).</text>
 </svg>

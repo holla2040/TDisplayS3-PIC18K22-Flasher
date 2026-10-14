@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// Bit-banged high-voltage ICSP host for PIC18(L)F2xK22/4xK22 (DS41398 §2.5, §2.7).
+// Bit-banged ICSP host (low-voltage, or high-voltage with ICSP_LVP 0, see config.h) for PIC18(L)F2xK22/4xK22 (DS41398 §2.5, §2.7).
 // Every frame is a 4-bit command + 16-bit payload, LSb first; the target latches
 // PGD on the PGC falling edge. Host-clocked, so interrupts only stretch the clock.
 
@@ -12,10 +12,10 @@
 #define P11_US  15000   // self-timed bulk erase (X5/X6 parts; X3/X4 need 12 ms)
 #define P11A_US 4000    // data EEPROM byte write
 
-void     icsp_init();                    // VPP off, 5 µs, MCLR_LOW on, PGC/PGD low outputs
-void     icsp_enter();                   // VPP off, 5 µs, reset, PGC/PGD low, MCLR_LOW off, 5 µs, VPP on, 100 µs
-void     icsp_exit();                    // VPP off, 5 µs, MCLR_LOW on, PGC/PGD inputs
-void     icsp_release();                 // MCLR_LOW off: the target runs (call after icsp_exit)
+void     icsp_init();                    // MCLR held low (reset), PGC/PGD low outputs
+void     icsp_enter();                   // LVP: MCLR low, key, MCLR high. HV: MCLR to VPP
+void     icsp_exit();                    // MCLR low (reset), PGC/PGD inputs
+void     icsp_release();                 // MCLR high: the target runs (call after icsp_exit)
 void     icsp_core(uint16_t instr);      // command 0000 + 16-bit instruction
 uint8_t  icsp_tblrd_postinc();           // command 1001, 8 dummy clocks, 8 clocks data out
 uint8_t  icsp_shift_tablat();            // command 0010

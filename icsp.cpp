@@ -8,7 +8,11 @@
 // Microchip DS41398 (PIC18(L)F2XK22/4XK22 Flash Memory Programming Specification).
 
 static const uint32_t PGD = 1UL << PGD_PIN, PGC = 1UL << PGC_PIN;
+#if ICSP_LVP
+static const uint32_t MCLR = 1UL << MCLR_PIN;
+#else
 static const uint32_t MCLR_LOW = 1UL << MCLR_LOW_PIN, VPP_ON = 1UL << VPP_ON_PIN;
+#endif
 
 static inline void half() {
   uint32_t t0 = esp_cpu_get_cycle_count();
@@ -45,6 +49,59 @@ static uint8_t read_byte() {
   return v;
 }
 
+#if ICSP_LVP
+static bool in_session;                          // between icsp_enter() and icsp_exit()
+
+static void pg_outputs() {
+  gpio_config_t c = {};
+  c.pin_bit_mask = 1ULL << PGD_PIN | 1ULL << PGC_PIN;
+  c.mode = GPIO_MODE_INPUT_OUTPUT;               // read back while released
+  c.pull_down_en = GPIO_PULLDOWN_ENABLE;         // no target => device ID reads 0x0000
+  gpio_config(&c);
+  GPIO.out_w1tc = PGC | PGD;
+}
+
+void icsp_init() {
+  GPIO.out_w1tc = MCLR | PGC | PGD;              // level before direction: target held in reset
+  gpio_config_t c = {};
+  c.pin_bit_mask = 1ULL << MCLR_PIN;
+  c.mode = GPIO_MODE_OUTPUT;
+  gpio_config(&c);
+  pg_outputs();
+}
+
+// DS41398 §2.6, Figure 2-14: MCLR VIH -> VIL, P18 >= 1 ms, 32-bit key 4D434850h
+// MSb first (write_bits() is LSb first, so one bit at a time), P20, MCLR to VIH,
+// P15 >= 400 µs before the first command. VDD is already up.
+void icsp_enter() {
+  GPIO.out_w1tc = PGC | PGD;
+  GPIO.enable_w1ts = PGC | PGD;
+  GPIO.out_w1ts = MCLR;                          // VIH first (no minimum hold)
+  delayMicroseconds(5);
+  GPIO.out_w1tc = MCLR;
+  delayMicroseconds(1000 + 100);                 // P18
+  const uint32_t key = 0x4D434850;
+  for (int i = 31; i >= 0; i--) write_bits(key >> i, 1);
+  GPIO.out_w1tc = PGD;
+  delayMicroseconds(1);                          // P20 40 ns
+  GPIO.out_w1ts = MCLR;
+  delayMicroseconds(400 + 100);                  // P15
+  in_session = true;
+}
+
+// Figure 2-15: P16 = 0 between the last PGC and MCLR falling.
+void icsp_exit() {
+  GPIO.out_w1tc = PGC | PGD;
+  GPIO.out_w1tc = MCLR;
+  GPIO.enable_w1tc = PGC | PGD;
+  in_session = false;
+}
+
+void icsp_release() {
+  if (in_session) return;                        // only from reset, never mid-session
+  GPIO.out_w1ts = MCLR;
+}
+#else
 void icsp_init() {
   // Levels before directions, so neither switch glitches on at boot. VPP_ON is
   // driven off first and MCLR_LOW only 5 µs later: break-before-make even if
@@ -94,6 +151,7 @@ void icsp_release() {
   if (GPIO.out & VPP_ON) return;                 // only from reset, never mid-session
   GPIO.out_w1tc = MCLR_LOW;
 }
+#endif
 
 void icsp_core(uint16_t instr) {
   write_bits(0x0, 4);

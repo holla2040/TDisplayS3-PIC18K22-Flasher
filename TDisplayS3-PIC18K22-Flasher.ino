@@ -65,7 +65,7 @@ static uint16_t lastBg = TFT_BLACK;
 static bool netUp = false;
 
 static uint32_t lastPoll = 0;
-static bool autoMode = true;   // default auto (enclosure has no buttons); MODE_BUTTON toggles
+static bool autoMode = false;  // manual by default: runs only from FLASH_BUTTON or POST /run, no probing; MODE_BUTTON toggles
 static char detected[32] = "no target";   // live probe result, home page line 1
 static char boardId[17] = "";             // user ID of the seated board: 16 hex, "blank", or "" (unknown)
 
@@ -479,7 +479,7 @@ static void maybeStartNetwork() {
 }
 
 void setup() {
-  icsp_init();   // first: VPP_ON off and the target held in reset before anything else runs
+  icsp_init();   // first: target held in reset (and HV: VPP_ON off) before anything else runs
   Serial.begin(115200);
 
   pinMode(MODE_BUTTON, INPUT_PULLUP);
@@ -513,6 +513,7 @@ void setup() {
     }
   }
 
+  probe();   // once, for home line 1; it also releases the target (manual mode doesn't poll)
   showHome();
 }
 
@@ -582,10 +583,11 @@ void loop() {
     return;
   }
 
-  // Live detection probe, both modes, once a second. Each probe holds the target
-  // in reset for a few ms. In auto mode a newly inserted target rolls straight
-  // into flash.txt (once per insertion).
-  if (millis() - lastPoll < 1000) return;
+  // Auto mode only: live detection probe once a second. Each probe holds the
+  // target in reset for a few ms, so manual mode doesn't probe and the target
+  // runs undisturbed. A newly inserted target rolls straight into flash.txt
+  // (once per insertion).
+  if (!autoMode || millis() - lastPoll < 1000) return;
   lastPoll = millis();
 
   char prev[sizeof(detected) + sizeof(boardId)];

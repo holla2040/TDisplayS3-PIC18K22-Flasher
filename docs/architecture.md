@@ -21,7 +21,8 @@ from the chip so it can be tested on the host against a fake chip.
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │ TDisplayS3-PIC18K22-Flasher.ino                               │
-│  probe every 1 s → run flash.txt once per insertion →         │
+│  manual (default): run on KEY or /run; auto: probe every 1 s, │
+│  run flash.txt once per insertion →                           │
 │  PASS / FAIL / orange notice; screen, buttons, WiFiManager,   │
 │  ArduinoOTA, web server, FFat file API                        │
 ├───────────────────────┬───────────────────┬───────────────────┤
@@ -33,12 +34,12 @@ from the chip so it can be tested on the host against a fake chip.
 │ ihx.cpp               │                   │ FFat: flash.txt,  │
 │  multi-region HEX     │                   │  *.hex, *.txt     │
 ├───────────────────────┴───────────────────┴───────────────────┤
-│ icsp.cpp — HV ICSP wire driver                                │
-│  HV entry / exit, 4-bit command + 16-bit frames, data out,    │
+│ icsp.cpp — ICSP wire driver (ICSP_LVP: LVP default, HV opt.)  │
+│  entry / exit, 4-bit command + 16-bit frames, data out,       │
 │  programming and bulk-erase holds                             │
 ├───────────────────────────────────────────────────────────────┤
-│ GPIO1 PGD · GPIO2 PGC · GPIO3 MCLR_LOW · GPIO10 VPP_ON        │
-│ (MCLR drive: N-FET pull-down, N-FET + P-FET high-side 9 V)    │
+│ GPIO1 PGD · GPIO2 PGC · GPIO3 MCLR (LVP: driven directly)     │
+│ (HV option: GPIO3 MCLR_LOW + GPIO10 VPP_ON, three MOSFETs)    │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,25 +54,48 @@ phase, never corrupt a bit.
 
 ### Pins and MCLR drive
 
+`ICSP_LVP` in `config.h` picks the entry method at build time: 1 (the default)
+is low-voltage ICSP, 0 is high-voltage. Only `icsp_init/enter/exit/release`
+differ; everything after entry is the same.
+
 | Pin | Role |
 |---|---|
 | GPIO1 `PGD_PIN` | PGD, bidirectional (input/output with an internal pull-down) |
 | GPIO2 `PGC_PIN` | PGC, driven by the jig (internal pull-down) |
-| GPIO3 `MCLR_LOW_PIN` | N-MOSFET: MCLR to GND through 100 Ω. High = target held in reset. |
-| GPIO10 `VPP_ON_PIN` | N-MOSFET driving a P-MOSFET high-side switch: 9 V onto MCLR. High = HV on. |
+| GPIO3 `MCLR_PIN` (LVP) | MCLR, driven directly: low = target in reset, high = runs |
+| GPIO3 `MCLR_LOW_PIN` (HV) | N-MOSFET: MCLR to GND through 100 Ω. High = target held in reset. |
+| GPIO10 `VPP_ON_PIN` (HV) | N-MOSFET driving a P-MOSFET high-side switch: 9 V onto MCLR. High = HV on. |
 
-`icsp_init()` (the first thing `setup()` does) sets the levels before the
-directions, so neither switch glitches on at boot: VPP_ON is made a low output
-first, then 5 µs later MCLR_LOW a high one (break-before-make even if GPIO10
-floated high), then PGC/PGD low. GPIO10 still floats before that runs, which is
-why the hardware has a 10 kΩ pull-down on it. GPIO3 is an ESP32-S3 strapping pin
-(JTAG source), sampled only if the `STRAP_JTAG_SEL` eFuse is burned (off by
-default); until `icsp_init()` Q1's gate floats, so MCLR is undefined for the
-first ~300 ms of a jig boot.
+GPIO3 is an ESP32-S3 strapping pin (JTAG source), sampled only if the
+`STRAP_JTAG_SEL` eFuse is burned (off by default). It floats until `icsp_init()`
+(the first thing `setup()` does), so MCLR is undefined for the first ~300 ms of a
+jig boot.
 
-### HV entry and exit (DS41398 §2.5, Figures 2-12 and 2-13)
+### LVP entry and exit (DS41398 §2.6, Figures 2-14 and 2-15)
 
-The jig powers VDD from 3V3, so VDD is already up. `icsp_enter()`:
+`icsp_init()` drives MCLR low (target in reset) and PGC/PGD low. The jig powers VDD,
+so VDD is already up. `icsp_enter()`:
+
+1. PGC/PGD low and driven. MCLR high for 5 µs, then low (VIH to VIL).
+2. Wait 1.1 ms (P18 ≥ 1 ms).
+3. Clock the key 4D434850h onto PGD, MSb first, one `write_bits(v, 1)` per bit
+   (`write_bits` is LSb first).
+4. PGD low, 1 µs (P20 ≥ 40 ns), MCLR high.
+5. Wait 500 µs (P15 ≥ 400 µs) before the first command.
+
+`icsp_exit()`: PGC/PGD low, MCLR low (P16 = 0), PGC/PGD released to inputs.
+`icsp_release()` sets MCLR high so the target runs; it does nothing between
+`icsp_enter()` and `icsp_exit()`. No target MCLR pull-up is needed: with `LVP` = 1
+the PIC enables MCLR and its internal weak pull-up regardless of `MCLRE`
+(DS40001412G §10.6.3, §24.9).
+
+### HV entry and exit (`ICSP_LVP 0`; DS41398 §2.5, Figures 2-12 and 2-13)
+
+`icsp_init()` sets the levels before the directions, so neither switch glitches
+on at boot: VPP_ON is made a low output first, then 5 µs later MCLR_LOW a high
+one (break-before-make even if GPIO10 floated high), then PGC/PGD low. GPIO10
+still floats before that runs, which is why the HV hardware has a 10 kΩ
+pull-down on it. `icsp_enter()`:
 
 1. VPP off, wait 5 µs, MCLR_LOW on (the target may be running: reset it first),
    PGC/PGD low and driven.
@@ -84,17 +108,12 @@ The jig powers VDD from 3V3, so VDD is already up. `icsp_enter()`:
 
 `icsp_exit()`: PGC/PGD low, VPP off, wait 5 µs (floating again), MCLR_LOW on,
 PGC/PGD released to inputs (P16 = 0: no PGC edge between the last frame and MCLR falling).
-
-LVP entry (key 4D434850h on PGD, MSb first, with MCLR at VIL; DS41398B §2.6) is
-not implemented. The README's [Low-voltage programming (LVP)](../README.md#low-voltage-programming-lvp)
-section has the wiring (five wires: GPIO3 drives MCLR directly, no boost, no
-transistors, GPIO10 unused) and the entry/exit sequence for targets that keep
-`LVP` = 1 (any `MCLRE`). LVP is the mode for the Trace boards.
-
 `icsp_release()` turns MCLR_LOW off so the target runs. It does nothing while
-VPP_ON is set, so it can't be used mid-session. After `icsp_exit()` the target is
-held in reset until something releases it: `icsp_init()` leaves it held, and the
-device layer releases it after every probe and at `reset`.
+VPP_ON is set.
+
+In both modes, after `icsp_exit()` the target is held in reset until something
+releases it: `icsp_init()` leaves it held, and the device layer releases it after
+every probe and at `reset`.
 
 ### Command frame
 
@@ -149,7 +168,7 @@ files.
 
 `pic_probe(uid)` enters programming mode, reads the device ID at 0x3FFFFE/F
 (`devid()`: `TBLPTR` = 0x3FFFFE, two `TBLRD*+`) and, for a known part, the 8
-user-ID bytes into `uid`, then leaves and releases MCLR: one HV session, so one
+user-ID bytes into `uid`, then leaves and releases MCLR: one ICSP session, so one
 target reset per probe. It returns `no target` for 0x0000 or 0xFFFF (PGC/PGD
 have internal pull-downs, so an empty jig reads zeros), the part name, or
 `unknown 0x5200` (the raw ID, revision bits included). It latches the detected
@@ -307,7 +326,8 @@ The jig powers the target, so there is no VDD sensing: a successful probe
 (device ID read, not 0x0000/0xFFFF) is the target-present detection.
 
 ```
-        probe every 1 s (one HV session: device ID + user ID)
+        auto mode: probe every 1 s (one ICSP session: device ID + user ID)
+        manual mode (default): probe once at boot and before each KEY / /run run
             │
  no target ◀┤ target present, auto mode, not yet run
  ×3 in a    ▼
@@ -375,7 +395,7 @@ checked on every path (HTTP and script `fs_ops`), so nothing can name a folder.
 
 ## Not built (possible additions)
 
-5 V targets, LVP (documented in the README, not implemented), other PIC families, a jig-assigned serial number, writing a
+5 V targets, other PIC families, a jig-assigned serial number, writing a
 user ID the jig made up, authentication on the web endpoints, per-board logs
 beyond the saved settings files, and wire-level error detection (ICSP gives the
 host no acknowledge, so the driver can't tell a lost command from a good one).

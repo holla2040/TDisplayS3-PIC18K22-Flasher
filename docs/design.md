@@ -42,14 +42,19 @@ Device table (device ID & 0xFFE0, from the pack; F / LF):
 - VPP 7.8–9.0 V at VDD 3.3 V (DS41398B D110: VDD + 4.5 V min, 9.0 V max; default 9.0). VDD 1.8–5.5 V (LF parts: 1.8–3.6 V).
 - Write row 64 bytes. Waits: bulk erase 15 ms, row program 1 ms, config 5 ms,
   EEPROM byte 4 ms, user ID 5 ms.
-- Low-voltage programming needs `LVP=ON`; field firmware commonly turns it
-  off, so the jig uses HV programming only. (Revised 2026-10-13: MCLRE does
-  not matter, MCLR is always enabled in LVP mode. LVP wiring and protocol are
-  now documented in the README; the firmware still does HV only.)
+- (Revised 2026-10-13.) The jig programs over LVP by default (`ICSP_LVP 1` in
+  `config.h`; `ICSP_LVP 0` builds the original HV driver). LVP needs `LVP=ON`,
+  the factory value; MCLRE does not matter, MCLR is always enabled in LVP mode.
+  Every `firmware.hex` must keep `LVP=ON`: preflight refuses a `write` that
+  clears it (`hex clears LVP`).
 - The K22 has no factory unique ID. The per-board identity is the 8 user-ID
   bytes, programmed by the board's firmware build or by MPLAB.
 
 ## Hardware
+
+LVP (the default, revised 2026-10-13): GPIO1 PGD, GPIO2 PGC, GPIO3 drives MCLR
+directly, 3V3 to VDD, GND; five wires to a 5-pin ICSP header, nothing else (see
+README "Wiring"). The table below is the original HV option (`ICSP_LVP 0`).
 
 | T-Display S3 | Target | Notes |
 |---|---|---|
@@ -73,8 +78,8 @@ Device table (device ID & 0xFFE0, from the pack; F / LF):
 
 ## Script
 
-`/flash.txt` runs on target insertion (auto mode) or on a KEY press (manual
-mode). Any `*.txt` script can also be run from the web page. One command per
+`/flash.txt` runs on a KEY press (manual mode, the default since 2026-10-13)
+or on target insertion (auto mode). Any `*.txt` script can also be run from the web page. One command per
 line, `#` starts a comment, blank lines ignored, whitespace-separated tokens.
 
 Default `/flash.txt` (created on first boot if missing):
@@ -157,7 +162,8 @@ reset
 
 ## Detection
 
-Once a second (both modes): enter HV programming, read the device ID, exit.
+Once a second in auto mode (manual mode, the default, probes only at boot and
+before each run): enter programming mode, read the device ID, exit.
 Device ID 0x0000 or 0xFFFF = no target. Otherwise home line 1 shows the part
 name from the device table (e.g. `PIC18F46K22`) or `unknown 0x5200` for an ID
 not in the table, shown raw with its revision bits (and no script runs on it).
@@ -186,7 +192,7 @@ probe (a few ms), once a second, the same tradeoff as the STM8 jig.
 | File | Role |
 |---|---|
 | `TDisplayS3-PIC18K22-Flasher.ino` | Copied from the STM32 jig: UI, auto/manual, buttons, WiFiManager (non-blocking), OTA, mDNS (`PIC18Flasher.local`), web server, FFat. The single-image loader is replaced by the script runner. |
-| `icsp.cpp/h` | Wire layer: HV entry/exit sequence, 4-bit command + 16-bit payload frames, TBLRD*+ byte read, data-out shifting, timing constants. Direct GPIO register access, as in `swd.cpp`. |
+| `icsp.cpp/h` | Wire layer: LVP (default) or HV entry/exit sequence, 4-bit command + 16-bit payload frames, TBLRD*+ byte read, data-out shifting, timing constants. Direct GPIO register access, as in `swd.cpp`. |
 | `pic18k22.cpp/h` | Device layer: device table (ID → name, flash size, EEPROM size, config masks), probe, region read, bulk erase (chip / EEPROM), 64-byte row write, user ID write, config byte write, EEPROM byte write. |
 | `script.cpp/h` | Parser and runner over a small device interface (function pointers), so it runs on the host against a fake chip. |
 | `ihx.cpp/h` | Sparse multi-region Intel HEX: parse into per-region buffers plus a written-byte mask; write a region back out as HEX (type 04 extended linear address records). |
@@ -214,6 +220,5 @@ probe (a few ms), once a second, the same tradeoff as the STM8 jig.
 
 ## Out of scope
 
-5 V targets; PIC families other than K22; LVP in the firmware (documented in
-the README, not implemented); a jig-assigned serial number;
+5 V targets; PIC families other than K22; a jig-assigned serial number;
 authentication; per-board logging beyond the settings files.

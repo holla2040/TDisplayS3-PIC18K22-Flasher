@@ -320,6 +320,30 @@ static void test_script_firmware_with_uid() {
   expect(run("read userid u-{id}.hex\nverify firmware.hex\nwrite u-{id}.hex\n"), SCRIPT_PASS, 0, "");
 }
 
+// A firmware.hex whose CONFIG4L clears LVP is refused before the chip is touched;
+// one that keeps LVP = 1 (0x85, the factory value) is fine.
+static void test_script_firmware_clears_lvp() {
+  reset_world();
+  char hex[8192];
+  strcpy(hex, find("firmware.hex")->text);
+  *strstr(hex, ":00000001FF") = 0;
+  uint8_t p30[2] = {0x00, 0x30}, c4l = 0x81;
+  rec(hex, 4, 0, p30, 2);
+  rec(hex, 0, 6, &c4l, 1);
+  strcat(hex, ":00000001FF\n");
+  set_file("firmware.hex", hex);
+  expect(run(DEFAULT_SCRIPT), SCRIPT_ERROR, 4, "hex clears LVP");
+  assert(!strcmp(logbuf, "D r1 "));
+  *strrchr(hex, ':') = 0;            // drop EOF, then the 1-byte record
+  *strrchr(hex, ':') = 0;
+  c4l = 0x85;
+  rec(hex, 0, 6, &c4l, 1);
+  strcat(hex, ":00000001FF\n");
+  set_file("firmware.hex", hex);
+  logbuf[0] = 0;
+  expect(run("erase chip\nwrite firmware.hex\nverify firmware.hex\n"), SCRIPT_PASS, 0, "");
+}
+
 // I1: a record beyond the detected part is caught before anything changes the chip.
 static void test_script_out_of_range() {
   reset_world();
@@ -417,6 +441,7 @@ int main() {
   test_script_rerun_keeps_settings();
   test_script_firmware_with_ee();
   test_script_firmware_with_uid();
+  test_script_firmware_clears_lvp();
   test_script_out_of_range();
   test_script_read_expand();
   test_script_erase_eeprom();

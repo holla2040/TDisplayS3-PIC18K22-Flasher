@@ -213,6 +213,8 @@ static int made_earlier(const char *script, int n, const char *id, const char *n
 // read). So a missing or oversize firmware.hex stops before erase chip, not after.
 // A write carrying user-ID bytes before a later user-ID write (firmware.hex with
 // IDLOC records) would refill the ID early and defeat "userid written last".
+// A write whose CONFIG4L clears LVP is refused: LVP is how these boards are
+// programmed, and only HV can set the bit again.
 static script_status preflight(ctx *c, const char *script, const char *id) {
   const char *p = script;
   char raw[LINE_MAX_LEN], line[LINE_MAX_LEN], name[NAME_MAX_LEN];
@@ -229,6 +231,9 @@ static script_status preflight(ctx *c, const char *script, const char *id) {
       script_status s = load_hex(c, n, name);
       if (s.result != SCRIPT_PASS) return s;
       uid = any_mask(&c->img.r[IHX_USERID]);
+      ihx_region *cfg = &c->img.r[IHX_CONFIG];
+      if (k.op == OP_WRITE && cfg->mask[6] && !(cfg->data[6] & 0x04))   // CONFIG4L bit 2
+        return status(SCRIPT_ERROR, n, "hex clears LVP");
     }
     if (k.op != OP_WRITE || !uid) continue;
     if (uid_line) return status(SCRIPT_ERROR, uid_line, "firmware has userid");
